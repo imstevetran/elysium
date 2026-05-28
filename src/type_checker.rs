@@ -397,3 +397,84 @@ impl TypeChecker {
         self.errors
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ast;
+
+    fn check_src(src: &str) -> std::result::Result<(), CompileError> {
+        let mut p = crate::parser::Parser::new(src);
+        let program = p.parse_program().expect("parse failed");
+        let mut tc = TypeChecker::new();
+        tc.check_program(&program)
+    }
+
+    fn assert_ok(src: &str) {
+        let result = check_src(src);
+        assert!(result.is_ok(), "expected Ok, got {:?}", result);
+    }
+
+    // ----- Spec items are ignored -----
+
+    #[test]
+    fn test_type_check_spec_is_ok() {
+        assert_ok(r##"spec "math" { feat "add" { expect 1 + 1 } }"##);
+    }
+
+    #[test]
+    fn test_type_check_describe_is_ok() {
+        assert_ok(r##"describe "suite" { it "pass" { expect true } }"##);
+    }
+
+    #[test]
+    fn test_type_check_todo_is_ok() {
+        assert_ok("func f() { todo }");
+    }
+
+    #[test]
+    fn test_type_check_todo_with_message_is_ok() {
+        assert_ok(r##"func f() { todo "fix this" }"##);
+    }
+
+    #[test]
+    fn test_type_check_question_is_ok() {
+        assert_ok("func f() { question }");
+    }
+
+    #[test]
+    fn test_type_check_bench_is_ok() {
+        assert_ok("func f() { bench { let x = 1 } }");
+    }
+
+    #[test]
+    fn test_type_check_bm_is_ok() {
+        assert_ok("func f() { bm { let x = 42 } }");
+    }
+
+    #[test]
+    fn test_type_check_expect_is_ok() {
+        assert_ok("func f() { expect 1 + 2 }");
+    }
+
+    #[test]
+    fn test_type_check_import_is_ok() {
+        assert_ok(r##"import "foo.ely""##);
+    }
+
+    #[test]
+    fn test_type_check_import_as_is_ok() {
+        assert_ok(r##"import "foo.ely" as mymod"##);
+    }
+
+    // ----- Combined -----
+
+    #[test]
+    fn test_type_check_spec_with_bench() {
+        assert_ok(r##"
+            spec "perf" {
+                feat "fib" { bench { let x = 1 } }
+            }
+        "##);
+    }
+}

@@ -179,3 +179,49 @@ impl OwnershipChecker {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn check_src(src: &str) -> std::result::Result<(), crate::error::CompileError> {
+        let mut p = crate::parser::Parser::new(src);
+        let program = p.parse_program().expect("parse failed");
+        let mut checker = OwnershipChecker::new();
+        checker.check_program(&program)
+    }
+
+    fn assert_ownership_ok(src: &str) {
+        assert!(check_src(src).is_ok(), "expected Ok, got error");
+    }
+
+    #[test]
+    fn test_ownership_todo() {
+        assert_ownership_ok("func f() { todo }");
+    }
+
+    #[test]
+    fn test_ownership_question() {
+        assert_ownership_ok("func f() { question }");
+    }
+
+    #[test]
+    fn test_ownership_expect() {
+        assert_ownership_ok("func f() { expect 1 + 2 }");
+    }
+
+    #[test]
+    fn test_ownership_bench() {
+        assert_ownership_ok("func f() { bench { let x = 1 } }");
+    }
+
+    #[test]
+    fn test_ownership_bm() {
+        assert_ownership_ok("func f() { bm { let x = 42 } }");
+    }
+
+    #[test]
+    fn test_ownership_spec() {
+        assert_ownership_ok(r##"spec "tests" { feat "add" { expect 1 + 1 } }"##);
+    }
+}

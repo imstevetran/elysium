@@ -450,3 +450,95 @@ impl<'a> Lowerer<'a> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ast;
+
+    fn parse_and_lower(src: &str) -> HirProgram {
+        let mut p = crate::parser::Parser::new(src);
+        let program = p.parse_program().expect("parse failed");
+        lower(&program, src)
+    }
+
+    fn last_func(prog: &HirProgram) -> &HirFunction {
+        prog.items.last().map(|i| match i {
+            HirItem::Function(f) => f,
+        }).expect("no functions")
+    }
+
+    // ----- Expect lowering -----
+
+    #[test]
+    fn test_hir_expect_lowers_to_expr() {
+        let prog = parse_and_lower("func f() { expect 1 + 2 }");
+        let func = last_func(&prog);
+        match &func.body.stmts[0] {
+            HirStmt::Expr(HirExpr::BinaryOp { op, .. }, _) => {
+                assert_eq!(*op, ast::BinaryOpKind::Add);
+            }
+            other => panic!("expected Expr(BinaryOp), got {:?}", other),
+        }
+    }
+
+    // ----- Todo lowering -----
+
+    #[test]
+    fn test_hir_todo_lowers_to_nil() {
+        let prog = parse_and_lower("func f() { todo }");
+        let func = last_func(&prog);
+        match &func.body.stmts[0] {
+            HirStmt::Expr(HirExpr::NilLit, _) => {} // ok
+            other => panic!("expected NilLit, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_hir_todo_with_message_lowers_to_nil() {
+        let prog = parse_and_lower(r##"func f() { todo "fix me" }"##);
+        let func = last_func(&prog);
+        match &func.body.stmts[0] {
+            HirStmt::Expr(HirExpr::NilLit, _) => {}
+            other => panic!("expected NilLit, got {:?}", other),
+        }
+    }
+
+    // ----- Question lowering -----
+
+    #[test]
+    fn test_hir_question_lowers_to_nil() {
+        let prog = parse_and_lower("func f() { question }");
+        let func = last_func(&prog);
+        match &func.body.stmts[0] {
+            HirStmt::Expr(HirExpr::NilLit, _) => {}
+            other => panic!("expected NilLit, got {:?}", other),
+        }
+    }
+
+    // ----- Bench lowering -----
+
+    #[test]
+    fn test_hir_bench_lowers_to_bench_block() {
+        let prog = parse_and_lower("func f() { bench { let x = 1 } }");
+        let func = last_func(&prog);
+        match &func.body.stmts[0] {
+            HirStmt::Bench(body, _) => {
+                // The bench body should contain the lowered let statement
+                assert!(!body.stmts.is_empty());
+                match &body.stmts[0] {
+                    HirStmt::Let { name, .. } => assert_eq!(name, "x"),
+                    other => panic!("expected Let, got {:?}", other),
+                }
+            }
+            other => panic!("expected Bench, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_hir_bm_shorthand() {
+        let prog = parse_and_lower("func f() { bm { } }");
+        let func = last_func(&prog);
+        assert!(matches!(&func.body.stmts[0], HirStmt::Bench(_, _)));
+    }
+}

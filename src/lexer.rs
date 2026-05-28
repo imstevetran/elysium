@@ -221,3 +221,138 @@ impl<'a> Iterator for TokenStream<'a> {
         Some((span.start, token, span.end))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn tokenize(input: &str) -> Vec<Token> {
+        TokenStream::new(input).map(|(_, t, _)| t).collect()
+    }
+
+    macro_rules! assert_token {
+        ($left:expr, $right:pat) => {
+            match &$left {
+                $right => {},
+                other => panic!("expected pattern, got {:?}", other),
+            }
+        };
+    }
+
+    #[test]
+    fn test_lex_spec_keyword() {
+        let toks = tokenize("spec");
+        assert_eq!(toks.len(), 1);
+        assert_eq!(toks[0], Token::Spec);
+    }
+
+    #[test]
+    fn test_lex_describe_keyword() {
+        let toks = tokenize("describe");
+        assert_eq!(toks.len(), 1);
+        assert_eq!(toks[0], Token::Describe);
+    }
+
+    #[test]
+    fn test_lex_feat_keyword() {
+        let toks = tokenize("feat");
+        assert_eq!(toks.len(), 1);
+        assert_eq!(toks[0], Token::Feat);
+    }
+
+    #[test]
+    fn test_lex_it_keyword() {
+        let toks = tokenize("it");
+        assert_eq!(toks.len(), 1);
+        assert_eq!(toks[0], Token::It);
+    }
+
+    #[test]
+    fn test_lex_expect_keyword() {
+        let toks = tokenize("expect");
+        assert_eq!(toks.len(), 1);
+        assert_eq!(toks[0], Token::Expect);
+    }
+
+    #[test]
+    fn test_lex_todo_keyword() {
+        let toks = tokenize("todo");
+        assert_eq!(toks.len(), 1);
+        assert_eq!(toks[0], Token::Todo);
+    }
+
+    #[test]
+    fn test_lex_question_keyword() {
+        let toks = tokenize("question");
+        assert_eq!(toks.len(), 1);
+        assert_eq!(toks[0], Token::KwQuestion);
+    }
+
+    #[test]
+    fn test_lex_bench_keyword() {
+        let toks = tokenize("bench");
+        assert_eq!(toks.len(), 1);
+        assert_eq!(toks[0], Token::Bench);
+    }
+
+    #[test]
+    fn test_lex_bm_keyword() {
+        let toks = tokenize("bm");
+        assert_eq!(toks.len(), 1);
+        assert_eq!(toks[0], Token::Bm);
+    }
+
+    #[test]
+    fn test_lex_import_as_keywords() {
+        let toks = tokenize("import as");
+        assert_eq!(toks.len(), 2);
+        assert_eq!(toks[0], Token::Import);
+        assert_eq!(toks[1], Token::As);
+    }
+
+    #[test]
+    fn test_lex_spec_suite() {
+        let src = r#"spec "my tests" { feat "add" { expect 1 + 1 } }"#;
+        let toks = tokenize(src);
+        let keywords: Vec<&Token> = toks.iter().filter(|t| matches!(t,
+            Token::Spec | Token::Describe | Token::Feat | Token::It
+            | Token::Expect | Token::Todo | Token::KwQuestion
+            | Token::Bench | Token::Bm | Token::Import | Token::As
+        )).collect();
+        assert_eq!(keywords.len(), 3);
+        assert_eq!(*keywords[0], Token::Spec);
+        assert_eq!(*keywords[1], Token::Feat);
+        assert_eq!(*keywords[2], Token::Expect);
+    }
+
+    #[test]
+    fn test_lex_bench_bm() {
+        let toks = tokenize("bench { bm { } }");
+        let keywords: Vec<&Token> = toks.iter().filter(|t| matches!(t, Token::Bench | Token::Bm)).collect();
+        assert_eq!(keywords.len(), 2);
+        assert_eq!(*keywords[0], Token::Bench);
+        assert_eq!(*keywords[1], Token::Bm);
+    }
+
+    #[test]
+    fn test_lex_todo_no_message() {
+        let toks = tokenize("todo");
+        assert_eq!(toks.len(), 1);
+        assert_eq!(toks[0], Token::Todo);
+    }
+
+    #[test]
+    fn test_lex_todo_with_message() {
+        let toks = tokenize(r#"todo "fix this later""#);
+        assert_eq!(toks.len(), 2); // todo keyword + string literal
+        assert_eq!(toks[0], Token::Todo);
+        assert_token!(toks[1], Token::StringLiteral(_));
+    }
+
+    #[test]
+    fn test_lex_question_with_message() {
+        let toks = tokenize(r#"question "why is this here?""#);
+        assert_eq!(toks[0], Token::KwQuestion);
+        assert_token!(toks[1], Token::StringLiteral(_));
+    }
+}

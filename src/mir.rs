@@ -394,3 +394,94 @@ impl MirLowerer {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn lower_hir_stmts(stmts: Vec<HirStmt>) -> MirProgram {
+        let hir_prog = HirProgram {
+            items: vec![HirItem::Function(HirFunction {
+                name: "test".to_string(),
+                params: vec![],
+                return_type: HirType::Nil,
+                body: HirBlock {
+                    stmts,
+                    first_line: 1,
+                },
+                is_async: false,
+                line: 1,
+            })],
+        };
+        lower(&hir_prog, 1)
+    }
+
+    fn last_func(prog: &MirProgram) -> &MirFunction {
+        prog.functions.last().expect("no functions")
+    }
+
+    // ----- Expect -----
+
+    #[test]
+    fn test_mir_expect_from_hir() {
+        let mir_prog = lower_hir_stmts(vec![
+            HirStmt::Expr(HirExpr::IntLit(42), 1),
+        ]);
+        let func = last_func(&mir_prog);
+        // Expect gets lowered to just an Expr, which becomes a Call
+        assert!(!func.body.stmts.is_empty());
+    }
+
+    // ----- Todo -> Nil -----
+
+    #[test]
+    fn test_mir_todo_becomes_call() {
+        let mir_prog = lower_hir_stmts(vec![
+            HirStmt::Expr(HirExpr::NilLit, 1),
+        ]);
+        let func = last_func(&mir_prog);
+        // NilLit becomes a Call with Literal(Nil) — the key is no panic
+        assert!(!func.body.stmts.is_empty());
+    }
+
+    // ----- Bench -----
+
+    #[test]
+    fn test_mir_bench_contains_body_stmts() {
+        let mir_prog = lower_hir_stmts(vec![
+            HirStmt::Bench(
+                HirBlock {
+                    stmts: vec![
+                        HirStmt::Expr(HirExpr::IntLit(99), 1),
+                    ],
+                    first_line: 1,
+                },
+                1,
+            ),
+        ]);
+        let func = last_func(&mir_prog);
+        match &func.body.stmts[0] {
+            MirStmt::Bench { body_stmts, .. } => {
+                assert!(!body_stmts.is_empty(), "bench body should contain stmts");
+            }
+            other => panic!("expected Bench, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_mir_bench_empty_body() {
+        let mir_prog = lower_hir_stmts(vec![
+            HirStmt::Bench(
+                HirBlock { stmts: vec![], first_line: 1 },
+                1,
+            ),
+        ]);
+        let func = last_func(&mir_prog);
+        match &func.body.stmts[0] {
+            MirStmt::Bench { body_stmts, .. } => {
+                assert!(body_stmts.is_empty(), "empty bench body should have no stmts");
+            }
+            other => panic!("expected Bench, got {:?}", other),
+        }
+    }
+}

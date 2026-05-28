@@ -1,0 +1,36 @@
+// Example using all spec-driven keywords
+
+spec "Math Tests" {
+    feat "addition" {
+        expect 1 + 1
+        expect 2 + 2
+    }
+    feat "subtraction" {
+        expect 5 - 3
+    }
+}
+
+describe "Other Tests" {
+    it "boolean" {
+        expect true
+        expect false
+    }
+    it "todo markers" {
+        todo
+        todo "implement this"
+    }
+}
+
+func main() {
+    let x = 42
+    question
+    question "why is this here?"
+    todo
+    todo "fix the bug"
+    bench {
+        let _ = x
+    }
+    bm {
+        let _ = x
+    }
+}

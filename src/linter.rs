@@ -578,3 +578,55 @@ fn to_pascal_case(s: &str) -> String {
     }
     result
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn lint_src(src: &str) -> LintResult {
+        let mut p = crate::parser::Parser::new(src);
+        let program = p.parse_program().expect("parse failed");
+        lint(src, &program)
+    }
+
+    fn assert_no_lint_errors(src: &str) {
+        let result = lint_src(src);
+        let errors: Vec<_> = result.diagnostics.iter().filter(|d| d.severity == Severity::Error).collect();
+        assert!(errors.is_empty(), "expected no lint errors, got: {:?}", errors);
+    }
+
+    #[test]
+    fn test_lint_spec() {
+        assert_no_lint_errors(r##"spec "math" { feat "add" { expect 1 + 1 } }"##);
+    }
+
+    #[test]
+    fn test_lint_describe() {
+        assert_no_lint_errors(r##"describe "suite" { it "pass" { expect true } }"##);
+    }
+
+    #[test]
+    fn test_lint_todo() {
+        assert_no_lint_errors("/// f\nfunc f() { todo }");
+    }
+
+    #[test]
+    fn test_lint_question() {
+        assert_no_lint_errors("/// f\nfunc f() { question }");
+    }
+
+    #[test]
+    fn test_lint_bench() {
+        assert_no_lint_errors("/// f\nfunc f() { bench { let x = 1 } }");
+    }
+
+    #[test]
+    fn test_lint_bm() {
+        assert_no_lint_errors("/// f\nfunc f() { bm { let x = 42 } }");
+    }
+
+    #[test]
+    fn test_lint_expect() {
+        assert_no_lint_errors("/// f\nfunc f() { expect 1 + 2 }");
+    }
+}

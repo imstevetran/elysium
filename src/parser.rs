@@ -1669,3 +1669,186 @@ impl<'a> Parser<'a> {
         err
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parse(src: &str) -> Program {
+        let mut p = Parser::new(src);
+        p.parse_program().expect("parse failed")
+    }
+
+    fn parse_stmt(src: &str) -> Stmt {
+        let mut p = Parser::new(src);
+        p.parse_stmt().expect("parse_stmt failed").value
+    }
+
+    fn get_body_stmts(item: &Item) -> &[Node<Stmt>] {
+        match item {
+            Item::Function(f) => &f.body.statements,
+            _ => panic!("expected function"),
+        }
+    }
+
+    // ----- Import -----
+
+    #[test]
+    fn test_parse_import() {
+        let prog = parse(r#"import "foo.ely""#);
+        let item = &prog.items[0].value;
+        match item {
+            Item::Import(path, alias) => {
+                assert_eq!(path, "foo.ely");
+                assert!(alias.is_none());
+            }
+            _ => panic!("expected Import"),
+        }
+    }
+
+    #[test]
+    fn test_parse_import_as() {
+        let prog = parse(r#"import "foo.ely" as mymod"#);
+        let item = &prog.items[0].value;
+        match item {
+            Item::Import(path, alias) => {
+                assert_eq!(path, "foo.ely");
+                assert_eq!(alias.as_deref(), Some("mymod"));
+            }
+            _ => panic!("expected Import"),
+        }
+    }
+
+    // ----- Spec / Describe -----
+
+    #[test]
+    fn test_parse_spec() {
+        let prog = parse(r##"spec "math tests" {
+            feat "add" { expect 1 + 1 }
+            it "sub" { expect 5 - 3 }
+        }"##);
+        let item = &prog.items[0].value;
+        match item {
+            Item::Spec(s) => {
+                assert_eq!(s.name, "math tests");
+                assert_eq!(s.feats.len(), 2);
+                assert_eq!(s.feats[0].name, "add");
+                assert_eq!(s.feats[1].name, "sub");
+                // Check expect inside first feat
+                let feat_body = &s.feats[0].body.statements;
+                assert!(matches!(feat_body[0].value, Stmt::Expect(_)));
+            }
+            _ => panic!("expected Spec"),
+        }
+    }
+
+    #[test]
+    fn test_parse_describe() {
+        let prog = parse(r##"describe "suite" {
+            feat "test" { expect true }
+        }"##);
+        assert!(matches!(&prog.items[0].value, Item::Spec(_)));
+    }
+
+    // ----- Expect -----
+
+    #[test]
+    fn test_parse_expect() {
+        let prog = parse("func f() {\n    expect 1 + 2\n}");
+        let stmts = get_body_stmts(&prog.items[0].value);
+        match &stmts[0].value {
+            Stmt::Expect(e) => {
+                // Check the inner expression is a BinaryOp
+                assert!(matches!(e.value.expr.value, Expr::BinaryOp { .. }));
+            }
+            other => panic!("expected Expect, got {:?}", other),
+        }
+    }
+
+    // ----- Todo -----
+
+    #[test]
+    fn test_parse_todo_no_message() {
+        let stmt = parse_stmt("todo");
+        assert!(matches!(stmt, Stmt::Todo(_)));
+        match &stmt {
+            Stmt::Todo(t) => assert!(t.value.message.is_none()),
+            _ => unreachable!(),
+        }
+    }
+
+    #[test]
+    fn test_parse_todo_with_message() {
+        let stmt = parse_stmt(r#"todo "do this later""#);
+        match &stmt {
+            Stmt::Todo(t) => assert_eq!(t.value.message.as_deref(), Some("do this later")),
+            _ => panic!("expected Todo"),
+        }
+    }
+
+    // ----- Question -----
+
+    #[test]
+    fn test_parse_question_no_message() {
+        let stmt = parse_stmt("question");
+        assert!(matches!(stmt, Stmt::Question(_)));
+    }
+
+    #[test]
+    fn test_parse_question_with_message() {
+        let stmt = parse_stmt(r#"question "is this correct?""#);
+        match &stmt {
+            Stmt::Question(q) => assert_eq!(q.value.message.as_deref(), Some("is this correct?")),
+            _ => panic!("expected Question"),
+        }
+    }
+
+    // ----- Bench / Bm -----
+
+    #[test]
+    fn test_parse_bench() {
+        let stmt = parse_stmt("bench { let x = 1 }");
+        match &stmt {
+            Stmt::Bench(b) => {
+                assert_eq!(b.value.body.statements.len(), 1);
+                assert!(matches!(&b.value.body.statements[0].value, Stmt::Let(_)));
+            }
+            _ => panic!("expected Bench"),
+        }
+    }
+
+    #[test]
+    fn test_parse_bm() {
+        let stmt = parse_stmt("bm { let x = 1 }");
+        assert!(matches!(stmt, Stmt::Bench(_)));
+    }
+
+    #[test]
+    fn test_parse_bench_in_func() {
+        let prog = parse("func f() {\n    bm {\n        let x = 42\n    }\n}");
+        let stmts = get_body_stmts(&prog.items[0].value);
+        assert!(matches!(&stmts[0].value, Stmt::Bench(_)));
+    }
+
+    // ----- Combined spec file -----
+
+    #[test]
+    fn test_parse_spec_with_import() {
+        let prog = parse(r##"import "math.ely"
+        spec "calc" {
+            feat "add" { expect 1 + 1 }
+        }"##);
+        assert_eq!(prog.items.len(), 2);
+        assert!(matches!(&prog.items[0].value, Item::Import(_, _)));
+        assert!(matches!(&prog.items[1].value, Item::Spec(_)));
+    }
+
+    // ----- Error cases -----
+
+    #[test]
+    fn test_parse_expect_error_on_invalid() {
+        let mut p = Parser::new("expect");
+        let result = p.parse_stmt();
+        assert!(result.is_err());
+    }
+}
