@@ -1,0 +1,8 @@
+/// Summary: A counter that increments.
+func counter(start: Int) -> Int {
+    let count = start
+    count + 1
+}
+
+let result = counter(5)
+print(result)

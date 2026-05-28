@@ -1,0 +1,8 @@
+/// Summary: Utility math functions.
+func square(x: Int) -> Int {
+    x * x
+}
+
+func double(x: Int) -> Int {
+    x + x
+}

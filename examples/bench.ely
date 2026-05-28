@@ -1,0 +1,16 @@
+// Benchmark example
+func fibonacci(n: Int) -> Int {
+    if n < 2 {
+        n
+    } else {
+        fibonacci(n-1) + fibonacci(n-2)
+    }
+}
+
+func main() {
+    let x = 0
+    bm {
+        x = fibonacci(30)
+    }
+    let _ = x
+}

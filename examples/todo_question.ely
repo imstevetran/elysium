@@ -1,0 +1,16 @@
+/// Summary: Spec with todo and question markers.
+func add(a: Int, b: Int) -> Int {
+    a + b
+}
+
+spec "Calculator" {
+    feat "adds two numbers" {
+        let result = add(2, 3)
+        expect result == 5
+        todo "test negative numbers"
+    }
+    feat "division" {
+        todo
+        question "what about division by zero?"
+    }
+}

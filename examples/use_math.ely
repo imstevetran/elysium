@@ -1,0 +1,9 @@
+/// Summary: Main program that imports math utilities.
+import "./math.ely"
+
+let a = 5
+let sq = square(a)
+let db = double(a)
+
+print(sq)
+print(db)

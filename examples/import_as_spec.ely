@@ -1,0 +1,13 @@
+/// Summary: Testing with import-as and specs combined.
+import "./math.ely" as math
+
+spec "Math" {
+    feat "square works" {
+        let result = math.square(4)
+        expect result == 16
+    }
+    feat "double works" {
+        let result = math.double(3)
+        expect result == 6
+    }
+}

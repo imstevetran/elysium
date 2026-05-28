@@ -1,0 +1,21 @@
+[workspace]
+members = [
+    ".",
+    "elysium-rt",
+]
+
+[package]
+name = "elysium"
+version = "0.1.0"
+edition = "2021"
+description = "Elysium 2.0 compiler - a human-friendly, AI-compatible programming language"
+
+[dependencies]
+logos = "0.15"
+inkwell = { version = "0.9", features = ["llvm18-1"] }
+clap = { version = "4", features = ["derive"] }
+codespan-reporting = "0.12"
+termcolor = "1.4"
+
+[features]
+default = []

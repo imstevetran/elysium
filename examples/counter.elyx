@@ -1,0 +1,11 @@
+/// Summary: Counter component with increment button.
+component Counter {
+    state count = 0
+
+    render {
+        <Column>
+            <Text>"Count: " + count</Text>
+            <Button label="Increment" onClick={count = count + 1} />
+        </Column>
+    }
+}

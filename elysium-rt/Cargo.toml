@@ -1,0 +1,7 @@
+[package]
+name = "elysium-rt"
+version = "0.1.0"
+edition = "2021"
+description = "Runtime library for Elysium 2.0 - ARC, async scheduler, channels, UI engine"
+
+[dependencies]

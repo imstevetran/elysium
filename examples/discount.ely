@@ -1,0 +1,13 @@
+/// Summary: Calculate discount for a customer.
+func discount(age: Int, purchases: [Float]) -> Float bc "Discount policy v3.2" {
+    let adultAge = 18 bc "legal adult age"
+
+    only age > 0 do {
+        let base = if age >= adultAge then 0.10 else 0.05
+
+        let total = sum(…purchases) bc "total of all purchases"
+        let extra = if total > 500 then 0.05 else 0.0
+
+        min(base + extra, 0.20)
+    }
+}

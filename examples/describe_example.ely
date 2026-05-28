@@ -1,0 +1,11 @@
+/// Summary: Example using describe/it alternative keywords.
+func greet(name: String) -> String {
+    "Hello, " + name
+}
+
+describe "Greeter" {
+    it "says hello" {
+        let msg = greet("World")
+        expect msg == "Hello, World"
+    }
+}

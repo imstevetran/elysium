@@ -1,0 +1,9 @@
+/// Summary: Main program that uses `import as` alias for math utilities.
+import "./math.ely" as math
+
+let a = 5
+let sq = math.square(a)
+let db = math.double(a)
+
+print(sq)
+print(db)

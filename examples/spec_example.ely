@@ -1,0 +1,15 @@
+/// Summary: Example demonstrating spec-driven development.
+func add(a: Int, b: Int) -> Int {
+    a + b
+}
+
+spec "Calculator" {
+    feat "adds two numbers" {
+        let result = add(2, 3)
+        expect result == 5
+    }
+    feat "adds negative numbers" {
+        let result = add(-1, -2)
+        expect result == -3
+    }
+}

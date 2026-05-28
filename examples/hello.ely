@@ -1,0 +1,7 @@
+/// Summary: Greet the user by name.
+func greet(name: String) -> String {
+    "Hello, " + name + "!"
+}
+
+let message = greet("Alice")
+print(message)
