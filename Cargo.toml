@@ -2,6 +2,7 @@
 members = [
     ".",
     "elysium-rt",
+    "epm",
 ]
 
 [package]

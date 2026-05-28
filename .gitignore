@@ -13,5 +13,9 @@ Cargo.lock
 a.out
 output.bc
 
+# EPM package manager
+elysium_modules/
+.epm/
+
 # macOS
 .DS_Store
