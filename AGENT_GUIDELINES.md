@@ -194,3 +194,26 @@ The `question` keyword was chosen over `oq` or `concern` because it's the most i
 - Codegen (`emit_regex_call`): prints `[regex] method: use JS runtime\n` — regex is JS-runtime-only
 - JS runtime `npm-package/runtime/regex.js` wraps native JavaScript `RegExp` with try/catch safety
 - Exported via `require('elysium-lang').regex`
+
+### DateTime Package (added May 2026)
+- Unified date/time between backend (C `time.h`) and frontend (JS `Date`)
+- All APIs use **unix timestamps** (seconds since epoch, `i64`) as the universal bridge
+- Desugaring in `main.rs` converts `datetime.method(...)` → `__datetime_method(...)`
+- Type checker registers `__datetime_*` builtins:
+  - `now() → Int` — current unix timestamp
+  - `fromTimestamp(ts: Int) → String` — convert to locale string
+  - `format(ts: Int, fmt: String) → String` — strftime-style formatting (supports `%Y %m %d %H %M %S %a %b`)
+  - `parse(str: String, fmt: String) → Int` — parse string → timestamp (JS-runtime-only)
+  - `year/month/day/hour/minute/second/weekday(ts: Int) → Int` — component extraction
+  - `addDays/addHours(ts: Int, n: Int) → Int` — arithmetic
+  - `diffSeconds(ts1: Int, ts2: Int) → Int` — difference
+- MIR: Uses `MirStmt::DateTimeCall { result, method, args, dbg_line }`
+- Codegen (`emit_datetime_call`):
+  - `now`: emits C `time(NULL)` call
+  - `fromTimestamp`/`format`: emits C `ctime()` via localtime
+  - Component extraction: emits C `localtime()` then GEP into `struct tm` fields (adjusts tm_year+1900, tm_mon+1)
+  - Arithmetic: pure integer math (`addDays`=86400s, `addHours`=3600s, `diffSeconds`=subtract)
+  - `parse`: stub (uses JS runtime)
+- JS runtime `npm-package/runtime/datetime.js` wraps native `Date` — all methods produce/consume the same unix timestamps
+- Unix timestamp format ensures data flows seamlessly between backend and frontend
+- Exported via `require('elysium-lang').datetime`

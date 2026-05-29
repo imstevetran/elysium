@@ -19,6 +19,7 @@ const fsMod = require('./fs');
 const transportMod = require('./transport');
 const stringMod = require('./string');
 const regexMod = require('./regex');
+const datetimeMod = require('./datetime');
 
 module.exports = {
   // ARC
@@ -55,4 +56,7 @@ module.exports = {
 
   // Regex utilities
   regex: regexMod,
+
+  // DateTime
+  datetime: datetimeMod,
 };

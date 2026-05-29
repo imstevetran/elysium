@@ -126,6 +126,7 @@ impl Codegen {
             MirStmt::TransportCall { dbg_line, .. } => *dbg_line,
             MirStmt::StringCall { dbg_line, .. } => *dbg_line,
             MirStmt::RegexCall { dbg_line, .. } => *dbg_line,
+            MirStmt::DateTimeCall { dbg_line, .. } => *dbg_line,
             _ => func.dbg_line,
         };
 
@@ -164,6 +165,9 @@ impl Codegen {
             }
             MirStmt::RegexCall { result, method, args, dbg_line: _ } => {
                 self.emit_regex_call(result, method, args, builder)?;
+            }
+            MirStmt::DateTimeCall { result, method, args, dbg_line: _ } => {
+                self.emit_datetime_call(result, method, args, builder)?;
             }
             _ => {}
         }
@@ -691,6 +695,191 @@ impl Codegen {
         let fmt = builder.build_global_string_ptr(&msg, "__regex_fmt").expect("fmt");
         let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__regex_printf")
             .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+        Ok(())
+    }
+
+    /// Emit a datetime call — emits real C time.h calls on the backend.
+    /// Uses unix timestamps (i64) as the universal bridge between C and JS.
+    fn emit_datetime_call(
+        &self,
+        result: &Option<String>,
+        method: &str,
+        args: &[MirValue],
+        builder: &inkwell::builder::Builder<'static>,
+    ) -> Result<()> {
+        let i32_ty = self.context.i32_type();
+        let i64_ty = self.context.i64_type();
+        let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::default());
+        let zero_i32 = i32_ty.const_zero();
+        let printf_ty = i32_ty.fn_type(&[ptr_ty.into()], true);
+        let printf_fn = self.module.add_function("printf", printf_ty, None);
+
+        match method {
+            "now" => {
+                let time_ty = i64_ty.fn_type(&[ptr_ty.into()], false);
+                let time_fn = self.module.add_function("time", time_ty, None);
+                let null_ptr = ptr_ty.const_null();
+                let ts_val = builder.build_call(time_fn, &[null_ptr.into()], "__dt_now")
+                    .map_err(|e| crate::error::CompileError::new(format!("time: {}", e)))?
+                    .as_any_value_enum()
+                    .into_int_value();
+                if let Some(dest) = result {
+                    let alloca = builder.build_alloca(i64_ty, &format!("__dt_result_{}", dest))
+                        .expect("dt alloca");
+                    builder.build_store(alloca, ts_val)
+                        .map_err(|e| crate::error::CompileError::new(format!("store dt: {}", e)))?;
+                }
+            }
+            "fromTimestamp" | "format" => {
+                let ts_val = args.first().map(|a| {
+                    match a {
+                        MirValue::IntLit(v) => i64_ty.const_int(*v as u64, false),
+                        _ => i64_ty.const_zero(),
+                    }
+                }).unwrap_or_else(|| i64_ty.const_zero());
+                let ts_alloca = builder.build_alloca(i64_ty, "__dt_ts").expect("dt ts alloca");
+                builder.build_store(ts_alloca, ts_val)
+                    .map_err(|e| crate::error::CompileError::new(format!("store ts: {}", e)))?;
+
+                let ctime_ty = ptr_ty.fn_type(&[ptr_ty.into()], false);
+                let ctime_fn = self.module.add_function("ctime", ctime_ty, None);
+                let str_ptr = builder.build_call(ctime_fn, &[ts_alloca.into()], "__dt_ctime")
+                    .map_err(|e| crate::error::CompileError::new(format!("ctime: {}", e)))?
+                    .as_any_value_enum()
+                    .into_pointer_value();
+
+                // Print the result
+                let fmt_str = builder.build_global_string_ptr("%s", "__dt_fmt").expect("fmt");
+                let _ = builder.build_call(printf_fn, &[fmt_str.as_pointer_value().into(), str_ptr.into()], "__dt_print")
+                    .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+
+                if let Some(dest) = result {
+                    let alloca = builder.build_alloca(ptr_ty, &format!("__dt_result_{}", dest))
+                        .expect("dt alloca");
+                    builder.build_store(alloca, str_ptr)
+                        .map_err(|e| crate::error::CompileError::new(format!("store dt: {}", e)))?;
+                }
+            }
+            // Component extraction: localtime_r then GEP into struct tm fields
+            "year" | "month" | "day" | "hour" | "minute" | "second" | "weekday" => {
+                let ts_val = match args.first() {
+                    Some(MirValue::IntLit(v)) => i64_ty.const_int(*v as u64, false),
+                    Some(MirValue::Local(name)) => {
+                        let msg = format!("[datetime] component {} from variable not supported in C codegen\n", method);
+                        let f = builder.build_global_string_ptr(&msg, "__dt_warn").expect("warn");
+                        let _ = builder.build_call(printf_fn, &[f.as_pointer_value().into()], "__dt_warn_call")
+                            .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+                        i64_ty.const_zero()
+                    }
+                    _ => i64_ty.const_zero(),
+                };
+                let ts_alloca = builder.build_alloca(i64_ty, "__dt_ts").expect("dt ts alloca");
+                builder.build_store(ts_alloca, ts_val)
+                    .map_err(|e| crate::error::CompileError::new(format!("store ts: {}", e)))?;
+
+                let localtime_ty = ptr_ty.fn_type(&[ptr_ty.into()], false);
+                let localtime_fn = self.module.add_function("localtime", localtime_ty, None);
+                let tm_ptr = builder.build_call(localtime_fn, &[ts_alloca.into()], "__dt_localtime")
+                    .map_err(|e| crate::error::CompileError::new(format!("localtime: {}", e)))?
+                    .as_any_value_enum()
+                    .into_pointer_value();
+
+                // struct tm: tm_sec(0), tm_min(1), tm_hour(2), tm_mday(3), tm_mon(4), tm_year(5), tm_wday(6)
+                let offset = match method {
+                    "second" => 0u32,
+                    "minute" => 1,
+                    "hour" => 2,
+                    "day" => 3,
+                    "month" => 4,
+                    "year" => 5,
+                    "weekday" => 6,
+                    _ => 0,
+                };
+                let tm_array_ty = i32_ty.array_type(9);
+                let idx = i32_ty.const_int(offset as u64, false);
+                let field_ptr = unsafe {
+                    builder.build_in_bounds_gep(tm_array_ty, tm_ptr, &[zero_i32, idx], "__dt_field")
+                }.map_err(|e| crate::error::CompileError::new(format!("gep tm: {}", e)))?;
+
+                let field_val = builder.build_load(i32_ty, field_ptr, "__dt_field_val")
+                    .map_err(|e| crate::error::CompileError::new(format!("load tm: {}", e)))?
+                    .into_int_value();
+
+                // Adjust year (tm_year + 1900) and month (tm_mon + 1)
+                let adjusted = if method == "year" {
+                    builder.build_int_add(field_val, i32_ty.const_int(1900, false), "__dt_year_adj")
+                        .map_err(|e| crate::error::CompileError::new(format!("add: {}", e)))?
+                } else if method == "month" {
+                    builder.build_int_add(field_val, i32_ty.const_int(1, false), "__dt_mon_adj")
+                        .map_err(|e| crate::error::CompileError::new(format!("add: {}", e)))?
+                } else {
+                    field_val
+                };
+
+                if let Some(dest) = result {
+                    let alloca = builder.build_alloca(i32_ty, &format!("__dt_result_{}", dest))
+                        .expect("dt alloca");
+                    builder.build_store(alloca, adjusted)
+                        .map_err(|e| crate::error::CompileError::new(format!("store dt: {}", e)))?;
+                }
+            }
+            "addDays" | "addHours" => {
+                let multiplier = if method == "addDays" { 86400i64 } else { 3600 };
+                let ts = args.get(0).map(|a| match a {
+                    MirValue::IntLit(v) => i64_ty.const_int(*v as u64, false),
+                    MirValue::Local(_) => i64_ty.const_zero(),
+                    _ => i64_ty.const_zero(),
+                }).unwrap_or_else(|| i64_ty.const_zero());
+                let amount = args.get(1).map(|a| match a {
+                    MirValue::IntLit(v) => i64_ty.const_int(*v as u64, false),
+                    MirValue::Local(_) => i64_ty.const_zero(),
+                    _ => i64_ty.const_zero(),
+                }).unwrap_or_else(|| i64_ty.const_zero());
+                let secs = i64_ty.const_int(multiplier as u64, false);
+                let delta = builder.build_int_mul(amount, secs, "__dt_mul")
+                    .map_err(|e| crate::error::CompileError::new(format!("mul: {}", e)))?;
+                let result_val = builder.build_int_add(ts, delta, "__dt_add")
+                    .map_err(|e| crate::error::CompileError::new(format!("add: {}", e)))?;
+                if let Some(dest) = result {
+                    let alloca = builder.build_alloca(i64_ty, &format!("__dt_result_{}", dest))
+                        .expect("dt alloca");
+                    builder.build_store(alloca, result_val)
+                        .map_err(|e| crate::error::CompileError::new(format!("store dt: {}", e)))?;
+                }
+            }
+            "diffSeconds" => {
+                let ts1 = args.get(0).map(|a| match a {
+                    MirValue::IntLit(v) => i64_ty.const_int(*v as u64, false),
+                    _ => i64_ty.const_zero(),
+                }).unwrap_or_else(|| i64_ty.const_zero());
+                let ts2 = args.get(1).map(|a| match a {
+                    MirValue::IntLit(v) => i64_ty.const_int(*v as u64, false),
+                    _ => i64_ty.const_zero(),
+                }).unwrap_or_else(|| i64_ty.const_zero());
+                let result_val = builder.build_int_sub(ts1, ts2, "__dt_diff")
+                    .map_err(|e| crate::error::CompileError::new(format!("sub: {}", e)))?;
+                if let Some(dest) = result {
+                    let alloca = builder.build_alloca(i64_ty, &format!("__dt_result_{}", dest))
+                        .expect("dt alloca");
+                    builder.build_store(alloca, result_val)
+                        .map_err(|e| crate::error::CompileError::new(format!("store dt: {}", e)))?;
+                }
+            }
+            "parse" => {
+                // strptime is POSIX, not always available — emit stub
+                let msg = builder.build_global_string_ptr(
+                    "[datetime] parse: use JS runtime\n", "__dt_parse_stub"
+                ).expect("stub");
+                let _ = builder.build_call(printf_fn, &[msg.as_pointer_value().into()], "__dt_stub")
+                    .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+            }
+            _ => {
+                let msg = format!("[datetime] {}: use JS runtime\n", method);
+                let f = builder.build_global_string_ptr(&msg, "__dt_stub").expect("stub");
+                let _ = builder.build_call(printf_fn, &[f.as_pointer_value().into()], "__dt_stub_call")
+                    .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+            }
+        }
         Ok(())
     }
 }

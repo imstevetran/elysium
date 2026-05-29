@@ -628,6 +628,7 @@ fn desugar_builtin_in_expr(expr: &mut ast::Expr) {
                     "transport" => "__transport_",
                     "string" => "__string_",
                     "regex" => "__regex_",
+                    "datetime" => "__datetime_",
                     _ => "",
                 };
                 if !prefix.is_empty() {

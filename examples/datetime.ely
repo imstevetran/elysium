@@ -1,0 +1,20 @@
+// Test datetime operations — unified between backend (C time.h) and frontend (JS Date)
+// All APIs use unix timestamps (seconds since epoch) as the universal bridge
+
+func main() {
+    let now = datetime.now()
+    let str = datetime.fromTimestamp(now)
+    let y = datetime.year(now)
+    let m = datetime.month(now)
+    let d = datetime.day(now)
+    let h = datetime.hour(now)
+    let min = datetime.minute(now)
+    let s = datetime.second(now)
+    let wd = datetime.weekday(now)
+    let tomorrow = datetime.addDays(now, 1)
+    let nextHour = datetime.addHours(now, 1)
+    let diff = datetime.diffSeconds(tomorrow, now)
+    let formatted = datetime.format(now, "%Y-%m-%d %H:%M:%S")
+
+    print("datetime operations completed\n")
+}

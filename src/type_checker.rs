@@ -298,6 +298,78 @@ impl TypeChecker {
                 );
             }
         }
+        // datetime.* builtins (unix timestamp as universal bridge)
+        {
+            // () → Int
+            self.functions.insert(
+                "__datetime_now".to_string(),
+                FunctionSignature {
+                    param_types: vec![],
+                    return_type: Box::new(Type::Int),
+                    is_async: false,
+                },
+            );
+            // (Int, String) → String
+            let fmt_sigs: &[(&str, Vec<Type>)] = &[
+                ("__datetime_fromTimestamp", vec![Type::Int]),
+                ("__datetime_format", vec![Type::Int, Type::String]),
+            ];
+            for (name, param_types) in fmt_sigs {
+                self.functions.insert(
+                    name.to_string(),
+                    FunctionSignature {
+                        param_types: param_types.clone(),
+                        return_type: Box::new(Type::String),
+                        is_async: false,
+                    },
+                );
+            }
+            // (String, String) → Int
+            self.functions.insert(
+                "__datetime_parse".to_string(),
+                FunctionSignature {
+                    param_types: vec![Type::String, Type::String],
+                    return_type: Box::new(Type::Int),
+                    is_async: false,
+                },
+            );
+            // (Int) → Int — component extraction
+            let comp_sigs: &[&str] = &[
+                "__datetime_year",
+                "__datetime_month",
+                "__datetime_day",
+                "__datetime_hour",
+                "__datetime_minute",
+                "__datetime_second",
+                "__datetime_weekday",
+            ];
+            for name in comp_sigs {
+                self.functions.insert(
+                    name.to_string(),
+                    FunctionSignature {
+                        param_types: vec![Type::Int],
+                        return_type: Box::new(Type::Int),
+                        is_async: false,
+                    },
+                );
+            }
+            // (Int, Int) → Int — arithmetic
+            let arith_sigs: &[&str] = &[
+                "__datetime_addDays",
+                "__datetime_addHours",
+                "__datetime_diffSeconds",
+            ];
+            for name in arith_sigs {
+                self.functions.insert(
+                    name.to_string(),
+                    FunctionSignature {
+                        param_types: vec![Type::Int, Type::Int],
+                        return_type: Box::new(Type::Int),
+                        is_async: false,
+                    },
+                );
+            }
+        }
         self.functions.insert(
             "sum".into(),
             FunctionSignature {
