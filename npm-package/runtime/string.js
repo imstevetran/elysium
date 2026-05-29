@@ -43,6 +43,15 @@ function repeat(s, count) { return typeof s === 'string' ? s.repeat(count) : '';
 function split(s, separator) { return typeof s === 'string' ? s.split(separator) : []; }
 function match(s, pattern) { return typeof s === 'string' ? s.match(pattern) : null; }
 
+// Crypto: (String) → String — hash, encode, HMAC
+function sha256(s) { return typeof s !== 'string' ? '' : (typeof require === 'function' ? (() => { try { const c = require('crypto'); return c.createHash('sha256').update(s).digest('hex'); } catch(_) { return ''; } })() : ''); }
+function md5(s) { return typeof s !== 'string' ? '' : (typeof require === 'function' ? (() => { try { const c = require('crypto'); return c.createHash('md5').update(s).digest('hex'); } catch(_) { return ''; } })() : ''); }
+function base64Encode(s) { return typeof s !== 'string' ? '' : (typeof Buffer !== 'undefined' ? Buffer.from(s).toString('base64') : (typeof btoa !== 'undefined' ? btoa(s) : '')); }
+function base64Decode(s) { return typeof s !== 'string' ? '' : (typeof Buffer !== 'undefined' ? Buffer.from(s, 'base64').toString('utf8') : (typeof atob !== 'undefined' ? atob(s) : '')); }
+function hexEncode(s) { return typeof s !== 'string' ? '' : (typeof Buffer !== 'undefined' ? Buffer.from(s).toString('hex') : (() => { let h = ''; for (let i = 0; i < s.length; i++) { const c = s.charCodeAt(i).toString(16); h += c.length === 1 ? '0' + c : c; } return h; })()); }
+function hexDecode(s) { return typeof s !== 'string' ? '' : (typeof Buffer !== 'undefined' ? Buffer.from(s, 'hex').toString('utf8') : (() => { let r = ''; for (let i = 0; i < s.length; i += 2) r += String.fromCharCode(parseInt(s.substr(i, 2), 16)); return r; })()); }
+function hmac(s, key) { return typeof s !== 'string' || typeof key !== 'string' ? '' : (typeof require === 'function' ? (() => { try { const c = require('crypto'); return c.createHmac('sha256', key).update(s).digest('hex'); } catch(_) { return ''; } })() : ''); }
+
 // () → String — generate a UUID v4
 function uuid() {
   // Modern browsers and Node 19+ have crypto.randomUUID
@@ -91,4 +100,12 @@ module.exports = {
   repeat,
   split,
   match,
+  sha256,
+  md5,
+  base64Encode,
+  base64Decode,
+  hexEncode,
+  hexDecode,
+  hmac,
+  uuid,
 };

@@ -731,6 +731,9 @@ fn is_string_method(method: &str) -> bool {
             | "slice" | "substring" | "replace" | "split"
             | "padStart" | "padEnd" | "repeat" | "concat"
             | "includes" | "search" | "match" | "toString"
+            // crypto methods
+            | "sha256" | "md5" | "base64Encode" | "base64Decode"
+            | "hexEncode" | "hexDecode" | "hmac"
     )
 }
 

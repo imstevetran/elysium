@@ -15,5 +15,13 @@ func main() {
     let hasHello = "hello world".contains("hello")
     let starts = "hello".startsWith("he")
 
+    // Crypto
+    let hash = "hello".sha256()
+    let md = "hello".md5()
+    let b64 = "hello".base64Encode()
+    let b64dec = "aGVsbG8=".base64Decode()
+    let hex = "hello".hexEncode()
+    let signature = "message".hmac("secret")
+
     print("string operations completed\n")
 }

@@ -1145,6 +1145,79 @@ impl Codegen {
                     .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
                 store_str(buf_ptr, result);
             }
+            // Crypto: build shell command at runtime via snprintf, then popen
+            "sha256" | "md5" | "base64Encode" | "base64Decode" | "hexEncode" | "hexDecode" | "hmac" => {
+                if let Some(s) = str_arg {
+                    let popen_ty = ptr_ty.fn_type(&[ptr_ty.into(), ptr_ty.into()], false);
+                    let popen_fn = self.module.add_function("popen", popen_ty, None);
+                    let fgets_ty = ptr_ty.fn_type(&[ptr_ty.into(), i32_ty.into(), ptr_ty.into()], false);
+                    let fgets_fn = self.module.add_function("fgets", fgets_ty, None);
+                    let pclose_ty = i32_ty.fn_type(&[ptr_ty.into()], false);
+                    let pclose_fn = self.module.add_function("pclose", pclose_ty, None);
+
+                    // snprintf(cmd_buf, 4096, cmd_fmt, s [, key])
+                    let snprintf_ty = i32_ty.fn_type(&[ptr_ty.into(), i64_ty.into(), ptr_ty.into()], true);
+                    let snprintf_fn = self.module.add_function("snprintf", snprintf_ty, None);
+
+                    let cmd_fmt_str = match method {
+                        "sha256" => "echo -n '%s' | openssl dgst -sha256 2>/dev/null | awk '{print $2}'",
+                        "md5" => "echo -n '%s' | openssl dgst -md5 2>/dev/null | awk '{print $2}'",
+                        "base64Encode" => "echo -n '%s' | openssl base64 -A 2>/dev/null",
+                        "base64Decode" => "echo -n '%s' | openssl base64 -d -A 2>/dev/null",
+                        "hexEncode" => "echo -n '%s' | xxd -p 2>/dev/null | tr -d '\\n'",
+                        "hexDecode" => "echo -n '%s' | xxd -r -p 2>/dev/null | tr -d '\\n'",
+                        "hmac" => "echo -n '%s' | openssl dgst -sha256 -hmac '%s' 2>/dev/null | awk '{print $2}'",
+                        _ => unreachable!(),
+                    };
+
+                    let cmd_arr_ty = i8_ty.array_type(4096);
+                    let cmd_buf = builder.build_alloca(cmd_arr_ty, &format!("__crypto_{}_cmd", method)).expect("cmd buf");
+                    let cmd_buf_ptr = unsafe {
+                        builder.build_in_bounds_gep(cmd_arr_ty, cmd_buf, &[zero_i32, zero_i32], &format!("__crypto_{}_cmd_ptr", method))
+                    }.map_err(|e| crate::error::CompileError::new(format!("gep: {}", e)))?;
+
+                    let fmt_cmd = builder.build_global_string_ptr(cmd_fmt_str, &format!("__crypto_{}_fmt", method)).expect("fmt");
+                    let cmd_size = i64_ty.const_int(4096, false);
+
+                    // Build snprintf args: buf, size, fmt, s [, key]
+                    if method == "hmac" {
+                        let key = match args.get(1).and_then(|a| self.mir_value_as_cstr_ptr(a, builder)) {
+                            Some(k) => k,
+                            None => builder.build_global_string_ptr("", "__crypto_hmac_key_empty").expect("key").as_pointer_value(),
+                        };
+                        let _ = builder.build_call(snprintf_fn, &[cmd_buf_ptr.into(), cmd_size.into(), fmt_cmd.as_pointer_value().into(), s.into(), key.into()], "__crypto_hmac_snprintf")
+                            .map_err(|e| crate::error::CompileError::new(format!("snprintf: {}", e)))?;
+                    } else {
+                        let _ = builder.build_call(snprintf_fn, &[cmd_buf_ptr.into(), cmd_size.into(), fmt_cmd.as_pointer_value().into(), s.into()], &format!("__crypto_{}_snprintf", method))
+                            .map_err(|e| crate::error::CompileError::new(format!("snprintf: {}", e)))?;
+                    }
+
+                    // popen(cmd_buf, "r")
+                    let mode_r = builder.build_global_string_ptr("r", &format!("__crypto_{}_mode", method)).expect("mode");
+                    let fp = builder.build_call(popen_fn, &[cmd_buf_ptr.into(), mode_r.as_pointer_value().into()], &format!("__crypto_{}_fp", method))
+                        .map_err(|e| crate::error::CompileError::new(format!("popen: {}", e)))?
+                        .as_any_value_enum()
+                        .into_pointer_value();
+
+                    // fgets(buf, 8192, fp)
+                    let out_arr_ty = i8_ty.array_type(8192);
+                    let out_buf = builder.build_alloca(out_arr_ty, &format!("__crypto_{}_out", method)).expect("out buf");
+                    let out_buf_ptr = unsafe {
+                        builder.build_in_bounds_gep(out_arr_ty, out_buf, &[zero_i32, zero_i32], &format!("__crypto_{}_out_ptr", method))
+                    }.map_err(|e| crate::error::CompileError::new(format!("gep: {}", e)))?;
+
+                    let _ = builder.build_call(fgets_fn, &[out_buf_ptr.into(), i32_ty.const_int(8192, false).into(), fp.into()], &format!("__crypto_{}_fgets", method))
+                        .map_err(|e| crate::error::CompileError::new(format!("fgets: {}", e)))?;
+                    let _ = builder.build_call(pclose_fn, &[fp.into()], &format!("__crypto_{}_pclose", method))
+                        .map_err(|e| crate::error::CompileError::new(format!("pclose: {}", e)))?;
+
+                    // printf("%s\n", result)
+                    let fmt_print = builder.build_global_string_ptr("%s\n", &format!("__crypto_{}_out_fmt", method)).expect("out fmt");
+                    let _ = builder.build_call(printf_fn, &[fmt_print.as_pointer_value().into(), out_buf_ptr.into()], &format!("__crypto_{}_print", method))
+                        .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+                    store_str(out_buf_ptr, result);
+                }
+            }
             _ => {}
         }
         Ok(())

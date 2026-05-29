@@ -221,7 +221,7 @@ impl TypeChecker {
                     },
                 );
             }
-            // String → String
+            // String → String (including crypto: sha256, md5, base64, hex)
             let string_sigs: &[(&str, Vec<Type>)] = &[
                 ("__string_toUpper", vec![Type::String]),
                 ("__string_toLower", vec![Type::String]),
@@ -239,6 +239,13 @@ impl TypeChecker {
                 ("__string_repeat", vec![Type::String, Type::Int]),
                 ("__string_split", vec![Type::String, Type::String]),
                 ("__string_match", vec![Type::String, Type::String]),
+                // crypto: (String) → String (input → hash/encoded)
+                ("__string_sha256", vec![Type::String]),
+                ("__string_md5", vec![Type::String]),
+                ("__string_base64Encode", vec![Type::String]),
+                ("__string_base64Decode", vec![Type::String]),
+                ("__string_hexEncode", vec![Type::String]),
+                ("__string_hexDecode", vec![Type::String]),
             ];
             for (name, param_types) in string_sigs {
                 self.functions.insert(
@@ -250,6 +257,15 @@ impl TypeChecker {
                     },
                 );
             }
+            // (String, String) → String (crypto: hmac with key)
+            self.functions.insert(
+                "__string_hmac".to_string(),
+                FunctionSignature {
+                    param_types: vec![Type::String, Type::String],
+                    return_type: Box::new(Type::String),
+                    is_async: false,
+                },
+            );
             // () → String
             self.functions.insert(
                 "__string_uuid".to_string(),
