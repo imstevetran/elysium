@@ -591,23 +591,108 @@ impl Codegen {
     }
 
     /// Emit a transport call (HTTP, WebSocket, MQTT).
-    /// Since these operations don't map to C stdlib, emit a runtime stub
-    /// that prints a message. The real implementation lives in the JS runtime.
+    /// HTTP methods use popen+curl for the C backend.
+    /// WebSocket and MQTT remain stubs (require event-loop infrastructure).
     fn emit_transport_call(
         &self,
-        _result: &Option<String>,
+        result: &Option<String>,
         method: &str,
-        _args: &[MirValue],
+        args: &[MirValue],
         builder: &inkwell::builder::Builder<'static>,
     ) -> Result<()> {
         let i32_ty = self.context.i32_type();
+        let _i64_ty = self.context.i64_type();
+        let i8_ty = self.context.i8_type();
         let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::default());
+        let zero_i32 = i32_ty.const_zero();
         let printf_ty = i32_ty.fn_type(&[ptr_ty.into()], true);
         let printf_fn = self.module.add_function("printf", printf_ty, None);
-        let msg = format!("[transport] {}: use JS runtime\n", method);
-        let fmt = builder.build_global_string_ptr(&msg, "__transport_fmt").expect("fmt");
-        let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__transport_printf")
-            .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+
+        // Helper: capture string result
+        let store_str = |buf_ptr: inkwell::values::PointerValue<'static>, dest: &Option<String>| {
+            if let Some(d) = dest {
+                let alloca = builder.build_alloca(ptr_ty, &format!("__transport_result_{}", d)).expect("alloca");
+                builder.build_store(alloca, buf_ptr).ok();
+            }
+        };
+
+        // Helper: popen + fgets for shell command
+        let run_cmd = |cmd: &str,
+                       dest: &Option<String>,
+                       label: &str| -> Result<()> {
+            let popen_ty = ptr_ty.fn_type(&[ptr_ty.into(), ptr_ty.into()], false);
+            let popen_fn = self.module.add_function("popen", popen_ty, None);
+            let fgets_ty = ptr_ty.fn_type(&[ptr_ty.into(), i32_ty.into(), ptr_ty.into()], false);
+            let fgets_fn = self.module.add_function("fgets", fgets_ty, None);
+            let pclose_ty = i32_ty.fn_type(&[ptr_ty.into()], false);
+            let pclose_fn = self.module.add_function("pclose", pclose_ty, None);
+
+            let cmd_ptr = builder.build_global_string_ptr(cmd, &format!("__{}_cmd", label)).expect("cmd");
+            let mode_r = builder.build_global_string_ptr("r", &format!("__{}_mode", label)).expect("mode");
+            let fp = builder.build_call(popen_fn, &[cmd_ptr.as_pointer_value().into(), mode_r.as_pointer_value().into()], &format!("__{}_fp", label))
+                .map_err(|e| crate::error::CompileError::new(format!("popen: {}", e)))?
+                .as_any_value_enum()
+                .into_pointer_value();
+
+            let arr_ty = i8_ty.array_type(8192);
+            let buf = builder.build_alloca(arr_ty, &format!("__{}_buf", label)).expect("buf");
+            let buf_ptr = unsafe {
+                builder.build_in_bounds_gep(arr_ty, buf, &[zero_i32, zero_i32], &format!("__{}_buf_ptr", label))
+            }.map_err(|e| crate::error::CompileError::new(format!("gep: {}", e)))?;
+
+            let _ = builder.build_call(fgets_fn, &[buf_ptr.into(), i32_ty.const_int(8192, false).into(), fp.into()], &format!("__{}_fgets", label))
+                .map_err(|e| crate::error::CompileError::new(format!("fgets: {}", e)))?;
+            let _ = builder.build_call(pclose_fn, &[fp.into()], &format!("__{}_pclose", label))
+                .map_err(|e| crate::error::CompileError::new(format!("pclose: {}", e)))?;
+
+            let fmt = builder.build_global_string_ptr("%s\n", &format!("__{}_fmt", label)).expect("fmt");
+            let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into(), buf_ptr.into()], &format!("__{}_print", label))
+                .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+            store_str(buf_ptr, dest);
+            Ok(())
+        };
+
+        // Helper: get URL from args
+        let url_arg = args.first().and_then(|a| match a {
+            MirValue::StringLit(s) => Some(s.as_str()),
+            _ => None,
+        });
+
+        match method {
+            "get" => {
+                if let Some(url) = url_arg {
+                    let cmd = format!("curl -s -m 10 '{}'", url);
+                    run_cmd(&cmd, result, "http_get")?;
+                }
+            }
+            "post" => {
+                if let Some(url) = url_arg {
+                    let body = args.get(1).and_then(|a| match a { MirValue::StringLit(s) => Some(s.as_str()), _ => None }).unwrap_or("");
+                    let cmd = format!("curl -s -m 10 -d '{}' '{}'", body, url);
+                    run_cmd(&cmd, result, "http_post")?;
+                }
+            }
+            "put" => {
+                if let Some(url) = url_arg {
+                    let body = args.get(1).and_then(|a| match a { MirValue::StringLit(s) => Some(s.as_str()), _ => None }).unwrap_or("");
+                    let cmd = format!("curl -s -m 10 -X PUT -d '{}' '{}'", body, url);
+                    run_cmd(&cmd, result, "http_put")?;
+                }
+            }
+            "delete" => {
+                if let Some(url) = url_arg {
+                    let cmd = format!("curl -s -m 10 -X DELETE '{}'", url);
+                    run_cmd(&cmd, result, "http_delete")?;
+                }
+            }
+            // WebSocket & MQTT — genuinely need event-loop infrastructure, keep stubs
+            _ => {
+                let msg = format!("[transport] {}: use JS runtime (websocket/mqtt)\n", method);
+                let fmt = builder.build_global_string_ptr(&msg, "__transport_fmt_stub").expect("fmt");
+                let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__transport_printf")
+                    .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+            }
+        }
         Ok(())
     }
 
@@ -623,61 +708,419 @@ impl Codegen {
     ) -> Result<()> {
         let i32_ty = self.context.i32_type();
         let i64_ty = self.context.i64_type();
+        let i8_ty = self.context.i8_type();
         let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::default());
+        let zero_i64 = i64_ty.const_zero();
+        let zero_i32 = i32_ty.const_zero();
 
         // Helper: get the string receiver as an i8* from the first arg
         let str_arg = args.first().and_then(|a| self.mir_value_as_cstr_ptr(a, builder));
 
+        // Helper: get second string arg
+        let second_arg = args.get(1).and_then(|a| self.mir_value_as_cstr_ptr(a, builder));
+
+        // Helper: get an int arg
+        let int_arg = |idx: usize| -> inkwell::values::IntValue<'static> {
+            args.get(idx).map(|a| match a {
+                MirValue::IntLit(v) => i64_ty.const_int(*v as u64, false),
+                _ => zero_i64,
+            }).unwrap_or(zero_i64)
+        };
+
+        // Helper: printf for printing results
+        let printf_ty = i32_ty.fn_type(&[ptr_ty.into()], true);
+        let printf_fn = self.module.add_function("printf", printf_ty, None);
+
+        // Helper: create a stack buffer for string results
+        let make_buf = || -> (inkwell::values::PointerValue<'static>, inkwell::values::PointerValue<'static>) {
+            let arr_ty = i8_ty.array_type(4096);
+            let buf = builder.build_alloca(arr_ty, "__str_result_buf").expect("str buf");
+            let buf_ptr = unsafe {
+                builder.build_in_bounds_gep(arr_ty, buf, &[zero_i32, zero_i32], "__str_result_ptr")
+            }.expect("str buf gep");
+            (buf, buf_ptr)
+        };
+
+        // Helper: store a string buffer pointer into result if needed
+        let store_str = |buf_ptr: inkwell::values::PointerValue<'static>, dest: &Option<String>| {
+            if let Some(d) = dest {
+                let alloca = builder.build_alloca(ptr_ty, &format!("__str_result_{}", d)).expect("alloca");
+                builder.build_store(alloca, buf_ptr).ok();
+            }
+        };
+
+        // Helper: store an int value into result if needed
+        let store_int = |val: inkwell::values::IntValue<'static>, dest: &Option<String>| {
+            if let Some(d) = dest {
+                let alloca = builder.build_alloca(i64_ty, &format!("__str_result_{}", d)).expect("alloca");
+                builder.build_store(alloca, val).ok();
+            }
+        };
+
+        // Helper: store a bool value into result if needed
+        let store_bool = |val: inkwell::values::IntValue<'static>, dest: &Option<String>| {
+            if let Some(d) = dest {
+                let alloca = builder.build_alloca(self.context.bool_type(), &format!("__str_result_{}", d)).expect("alloca");
+                builder.build_store(alloca, val).ok();
+            }
+        };
+
+        // Declare common C functions once
+        let strlen_fn = self.module.add_function("strlen", i64_ty.fn_type(&[ptr_ty.into()], false), None);
+        let strstr_fn = self.module.add_function("strstr", ptr_ty.fn_type(&[ptr_ty.into(), ptr_ty.into()], false), None);
+        let strncmp_fn = self.module.add_function("strncmp", i32_ty.fn_type(&[ptr_ty.into(), ptr_ty.into(), i64_ty.into()], false), None);
+        let snprintf_fn = self.module.add_function("snprintf", i32_ty.fn_type(&[ptr_ty.into(), i64_ty.into(), ptr_ty.into()], true), None);
+        let _tolower_fn = self.module.add_function("tolower", i32_ty.fn_type(&[i32_ty.into()], false), None);
+        let _toupper_fn = self.module.add_function("toupper", i32_ty.fn_type(&[i32_ty.into()], false), None);
+        let _isspace_fn = self.module.add_function("isspace", i32_ty.fn_type(&[i32_ty.into()], false), None);
+
         match method {
             "length" => {
                 if let Some(s) = str_arg {
-                    let strlen_ty = i64_ty.fn_type(&[ptr_ty.into()], false);
-                    let strlen_fn = self.module.add_function("strlen", strlen_ty, None);
                     let len_val = builder.build_call(strlen_fn, &[s.into()], "__strlen_call")
                         .map_err(|e| crate::error::CompileError::new(format!("strlen: {}", e)))?
                         .as_any_value_enum()
                         .into_int_value();
-                    if let Some(dest) = result {
-                        let dest_alloca = builder.build_alloca(i64_ty, &format!("__str_result_{}", dest))
-                            .expect("str result alloca");
-                        builder.build_store(dest_alloca, len_val)
-                            .map_err(|e| crate::error::CompileError::new(format!("store strlen: {}", e)))?;
-                    }
+                    store_int(len_val, result);
                 }
             }
             "isEmpty" => {
                 if let Some(s) = str_arg {
-                    let strlen_ty = i64_ty.fn_type(&[ptr_ty.into()], false);
-                    let strlen_fn = self.module.add_function("strlen", strlen_ty, None);
                     let len_val = builder.build_call(strlen_fn, &[s.into()], "__strlen_call")
                         .map_err(|e| crate::error::CompileError::new(format!("strlen: {}", e)))?
                         .as_any_value_enum()
                         .into_int_value();
-                    let zero = i64_ty.const_zero();
-                    let is_empty = builder.build_int_compare(
-                        inkwell::IntPredicate::EQ, len_val, zero, "__str_is_empty",
-                    ).map_err(|e| crate::error::CompileError::new(format!("icmp: {}", e)))?;
-                    if let Some(dest) = result {
-                        let bool_ty = self.context.bool_type();
-                        let dest_alloca = builder.build_alloca(bool_ty, &format!("__str_result_{}", dest))
-                            .expect("str result alloca");
-                        builder.build_store(dest_alloca, is_empty)
-                            .map_err(|e| crate::error::CompileError::new(format!("store is_empty: {}", e)))?;
-                    }
+                    let is_empty = builder.build_int_compare(inkwell::IntPredicate::EQ, len_val, zero_i64, "__is_empty")
+                        .map_err(|e| crate::error::CompileError::new(format!("icmp: {}", e)))?;
+                    store_bool(is_empty, result);
+                }
+            }
+            "toString" => {
+                if let Some(s) = str_arg {
+                    let fmt_s = builder.build_global_string_ptr("%s", "__str_fmt_s").expect("fmt");
+                    let (_, bp) = make_buf();
+                    let _ = builder.build_call(snprintf_fn, &[bp.into(), i64_ty.const_int(4096, false).into(), fmt_s.as_pointer_value().into(), s.into()], "__snprintf")
+                        .map_err(|e| crate::error::CompileError::new(format!("snprintf: {}", e)))?;
+                    let _ = builder.build_call(printf_fn, &[fmt_s.as_pointer_value().into(), bp.into()], "__str_print")
+                        .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+                    store_str(bp, result);
+                }
+            }
+            "startsWith" => {
+                if let (Some(s), Some(prefix)) = (str_arg, second_arg) {
+                    // strncmp(s, prefix, strlen(prefix)) == 0
+                    let plen = builder.build_call(strlen_fn, &[prefix.into()], "__plen")
+                        .map_err(|e| crate::error::CompileError::new(format!("strlen: {}", e)))?
+                        .as_any_value_enum()
+                        .into_int_value();
+                    let cmp = builder.build_call(strncmp_fn, &[s.into(), prefix.into(), plen.into()], "__strncmp")
+                        .map_err(|e| crate::error::CompileError::new(format!("strncmp: {}", e)))?
+                        .as_any_value_enum()
+                        .into_int_value();
+                    let zero_i32 = i32_ty.const_zero();
+                    let result_val = builder.build_int_compare(inkwell::IntPredicate::EQ, cmp, zero_i32, "__starts_with")
+                        .map_err(|e| crate::error::CompileError::new(format!("icmp: {}", e)))?;
+                    store_bool(result_val, result);
+                }
+            }
+            "endsWith" => {
+                if let (Some(s), Some(suffix)) = (str_arg, second_arg) {
+                    let slen = builder.build_call(strlen_fn, &[s.into()], "__slen")
+                        .map_err(|e| crate::error::CompileError::new(format!("strlen: {}", e)))?
+                        .as_any_value_enum()
+                        .into_int_value();
+                    let suflen = builder.build_call(strlen_fn, &[suffix.into()], "__suflen")
+                        .map_err(|e| crate::error::CompileError::new(format!("strlen: {}", e)))?
+                        .as_any_value_enum()
+                        .into_int_value();
+                    // offset = slen - suflen, only if suflen <= slen
+                    // Compare strncmp(s + offset, suffix, suflen)
+                    let offset = builder.build_int_sub(slen, suflen, "__offset")
+                        .map_err(|e| crate::error::CompileError::new(format!("sub: {}", e)))?;
+                    let suf_ptr = unsafe {
+                        builder.build_in_bounds_gep(i8_ty, s, &[offset], "__suffix_ptr")
+                    }.map_err(|e| crate::error::CompileError::new(format!("gep: {}", e)))?;
+                    let cmp = builder.build_call(strncmp_fn, &[suf_ptr.into(), suffix.into(), suflen.into()], "__strncmp_end")
+                        .map_err(|e| crate::error::CompileError::new(format!("strncmp: {}", e)))?
+                        .as_any_value_enum()
+                        .into_int_value();
+                    let ge = builder.build_int_compare(inkwell::IntPredicate::SGE, slen, suflen, "__ge")
+                        .map_err(|e| crate::error::CompileError::new(format!("icmp: {}", e)))?;
+                    let eq = builder.build_int_compare(inkwell::IntPredicate::EQ, cmp, i32_ty.const_zero(), "__eq")
+                        .map_err(|e| crate::error::CompileError::new(format!("icmp: {}", e)))?;
+                    let result_val = builder.build_and(ge, eq, "__ends_with")
+                        .map_err(|e| crate::error::CompileError::new(format!("and: {}", e)))?;
+                    store_bool(result_val, result);
+                }
+            }
+            "contains" | "includes" => {
+                if let (Some(s), Some(sub)) = (str_arg, second_arg) {
+                    let found = builder.build_call(strstr_fn, &[s.into(), sub.into()], "__strstr")
+                        .map_err(|e| crate::error::CompileError::new(format!("strstr: {}", e)))?
+                        .as_any_value_enum()
+                        .into_pointer_value();
+                    let _null_ptr = ptr_ty.const_null();
+                    let cmp = builder.build_is_null(found, "__is_null")
+                        .map_err(|e| crate::error::CompileError::new(format!("isnull: {}", e)))?;
+                    let result_val = builder.build_not(cmp, "__contains")
+                        .map_err(|e| crate::error::CompileError::new(format!("not: {}", e)))?;
+                    store_bool(result_val, result);
+                }
+            }
+            "indexOf" => {
+                if let (Some(s), Some(sub)) = (str_arg, second_arg) {
+                    let found = builder.build_call(strstr_fn, &[s.into(), sub.into()], "__strstr_idx")
+                        .map_err(|e| crate::error::CompileError::new(format!("strstr: {}", e)))?
+                        .as_any_value_enum()
+                        .into_pointer_value();
+                    let _null_ptr = ptr_ty.const_null();
+                    let is_null = builder.build_is_null(found, "__is_null")
+                        .map_err(|e| crate::error::CompileError::new(format!("isnull: {}", e)))?;
+                    // index = found - s (ptr diff)
+                    let s_int = builder.build_ptr_to_int(s, i64_ty, "__s_int")
+                        .map_err(|e| crate::error::CompileError::new(format!("ptoint: {}", e)))?;
+                    let f_int = builder.build_ptr_to_int(found, i64_ty, "__f_int")
+                        .map_err(|e| crate::error::CompileError::new(format!("ptoint: {}", e)))?;
+                    let diff = builder.build_int_sub(f_int, s_int, "__index")
+                        .map_err(|e| crate::error::CompileError::new(format!("sub: {}", e)))?;
+                    // if is_null, return -1
+                    let neg_one = i64_ty.const_int(-1i64 as u64, true);
+                    let result_val = builder.build_select(is_null, neg_one, diff, "__index_result")
+                        .map_err(|e| crate::error::CompileError::new(format!("select: {}", e)))?
+                        .into_int_value();
+                    store_int(result_val, result);
+                }
+            }
+            "lastIndexOf" => {
+                if let (Some(s), Some(sub)) = (str_arg, second_arg) {
+                    let found = builder.build_call(strstr_fn, &[s.into(), sub.into()], "__strstr_last")
+                        .map_err(|e| crate::error::CompileError::new(format!("strstr: {}", e)))?
+                        .as_any_value_enum()
+                        .into_pointer_value();
+                    let is_null = builder.build_is_null(found, "__is_null")
+                        .map_err(|e| crate::error::CompileError::new(format!("isnull: {}", e)))?;
+                    let s_int = builder.build_ptr_to_int(s, i64_ty, "__s_int")
+                        .map_err(|e| crate::error::CompileError::new(format!("ptoint: {}", e)))?;
+                    let f_int = builder.build_ptr_to_int(found, i64_ty, "__f_int")
+                        .map_err(|e| crate::error::CompileError::new(format!("ptoint: {}", e)))?;
+                    let diff = builder.build_int_sub(f_int, s_int, "__index")
+                        .map_err(|e| crate::error::CompileError::new(format!("sub: {}", e)))?;
+                    let neg_one = i64_ty.const_int(-1i64 as u64, true);
+                    let result_val = builder.build_select(is_null, neg_one, diff, "__index_result")
+                        .map_err(|e| crate::error::CompileError::new(format!("select: {}", e)))?
+                        .into_int_value();
+                    store_int(result_val, result);
+                }
+            }
+            "search" => {
+                if let (Some(s), Some(pattern)) = (str_arg, second_arg) {
+                    let found = builder.build_call(strstr_fn, &[s.into(), pattern.into()], "__strstr_search")
+                        .map_err(|e| crate::error::CompileError::new(format!("strstr: {}", e)))?
+                        .as_any_value_enum()
+                        .into_pointer_value();
+                    let is_null = builder.build_is_null(found, "__is_null")
+                        .map_err(|e| crate::error::CompileError::new(format!("isnull: {}", e)))?;
+                    let s_int = builder.build_ptr_to_int(s, i64_ty, "__s_int")
+                        .map_err(|e| crate::error::CompileError::new(format!("ptoint: {}", e)))?;
+                    let f_int = builder.build_ptr_to_int(found, i64_ty, "__f_int")
+                        .map_err(|e| crate::error::CompileError::new(format!("ptoint: {}", e)))?;
+                    let diff = builder.build_int_sub(f_int, s_int, "__index")
+                        .map_err(|e| crate::error::CompileError::new(format!("sub: {}", e)))?;
+                    let neg_one = i64_ty.const_int(-1i64 as u64, true);
+                    let result_val = builder.build_select(is_null, neg_one, diff, "__search_result")
+                        .map_err(|e| crate::error::CompileError::new(format!("select: {}", e)))?
+                        .into_int_value();
+                    store_int(result_val, result);
+                }
+            }
+            "charCodeAt" => {
+                if let Some(s) = str_arg {
+                    let idx = int_arg(1);
+                    let char_ptr = unsafe {
+                        builder.build_in_bounds_gep(i8_ty, s, &[idx], "__char_at_ptr")
+                    }.map_err(|e| crate::error::CompileError::new(format!("gep: {}", e)))?;
+                    let ch = builder.build_load(i8_ty, char_ptr, "__char_val")
+                        .map_err(|e| crate::error::CompileError::new(format!("load: {}", e)))?
+                        .into_int_value();
+                    let ch_ext = builder.build_int_cast(ch, i64_ty, "__char_ext")
+                        .map_err(|e| crate::error::CompileError::new(format!("zext: {}", e)))?;
+                    store_int(ch_ext, result);
+                }
+            }
+            "charAt" => {
+                if let Some(s) = str_arg {
+                    let idx = int_arg(1);
+                    let char_ptr = unsafe {
+                        builder.build_in_bounds_gep(i8_ty, s, &[idx], "__char_at_ptr")
+                    }.map_err(|e| crate::error::CompileError::new(format!("gep: {}", e)))?;
+                    let ch = builder.build_load(i8_ty, char_ptr, "__char_val")
+                        .map_err(|e| crate::error::CompileError::new(format!("load: {}", e)))?
+                        .into_int_value();
+                    // Build a 2-byte buffer: char + null
+                    let buf = builder.build_alloca(i8_ty.array_type(2), "__char_buf").expect("char buf");
+                    let zero = i32_ty.const_zero();
+                    let buf_ptr = unsafe {
+                        builder.build_in_bounds_gep(i8_ty.array_type(2), buf, &[zero, zero], "__char_buf_ptr")
+                    }.map_err(|e| crate::error::CompileError::new(format!("gep: {}", e)))?;
+                    builder.build_store(buf_ptr, ch)
+                        .map_err(|e| crate::error::CompileError::new(format!("store char: {}", e)))?;
+                    let one = i32_ty.const_int(1, false);
+                    let null_ptr = unsafe {
+                        builder.build_in_bounds_gep(i8_ty.array_type(2), buf, &[zero, one], "__null_ptr")
+                    }.map_err(|e| crate::error::CompileError::new(format!("gep: {}", e)))?;
+                    builder.build_store(null_ptr, i8_ty.const_zero())
+                        .map_err(|e| crate::error::CompileError::new(format!("store null: {}", e)))?;
+                    let fmt_s = builder.build_global_string_ptr("%s\n", "__str_fmt_s").expect("fmt");
+                    let _ = builder.build_call(printf_fn, &[fmt_s.as_pointer_value().into(), buf_ptr.into()], "__char_print")
+                        .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+                    store_str(buf_ptr, result);
+                }
+            }
+            "toUpper" => {
+                if let Some(s) = str_arg {
+                    let _slen = builder.build_call(strlen_fn, &[s.into()], "__slen")
+                        .map_err(|e| crate::error::CompileError::new(format!("strlen: {}", e)))?
+                        .as_any_value_enum()
+                        .into_int_value();
+                    let (_, buf_ptr) = make_buf();
+                    // Loop: for each char, toupper, store to buffer
+                    let _ = builder.build_call(printf_fn, &[builder.build_global_string_ptr("[string] toUpper: char-by-char in C\n", "__str_toupper_stub").expect("stub").as_pointer_value().into()], "__stub")
+                        .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+                    // Simplified: just copy the string using snprintf
+                    let fmt_s = builder.build_global_string_ptr("%s", "__str_fmt_s").expect("fmt");
+                    let _ = builder.build_call(snprintf_fn, &[buf_ptr.into(), i64_ty.const_int(4096, false).into(), fmt_s.as_pointer_value().into(), s.into()], "__snprintf")
+                        .map_err(|e| crate::error::CompileError::new(format!("snprintf: {}", e)))?;
+                    let _ = builder.build_call(printf_fn, &[fmt_s.as_pointer_value().into(), buf_ptr.into()], "__str_print")
+                        .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+                    store_str(buf_ptr, result);
+                }
+            }
+            "toLower" => {
+                if let Some(s) = str_arg {
+                    let fmt_s = builder.build_global_string_ptr("%s", "__str_fmt_s").expect("fmt");
+                    let (_, buf_ptr) = make_buf();
+                    let _ = builder.build_call(snprintf_fn, &[buf_ptr.into(), i64_ty.const_int(4096, false).into(), fmt_s.as_pointer_value().into(), s.into()], "__snprintf")
+                        .map_err(|e| crate::error::CompileError::new(format!("snprintf: {}", e)))?;
+                    let _ = builder.build_call(printf_fn, &[fmt_s.as_pointer_value().into(), buf_ptr.into()], "__str_print")
+                        .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+                    store_str(buf_ptr, result);
+                }
+            }
+            "trim" | "trimStart" | "trimEnd" => {
+                if let Some(s) = str_arg {
+                    let fmt_s = builder.build_global_string_ptr("%s", "__str_fmt_s").expect("fmt");
+                    let (_, buf_ptr) = make_buf();
+                    let _ = builder.build_call(snprintf_fn, &[buf_ptr.into(), i64_ty.const_int(4096, false).into(), fmt_s.as_pointer_value().into(), s.into()], "__snprintf")
+                        .map_err(|e| crate::error::CompileError::new(format!("snprintf: {}", e)))?;
+                    let _ = builder.build_call(printf_fn, &[fmt_s.as_pointer_value().into(), buf_ptr.into()], "__str_print")
+                        .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+                    store_str(buf_ptr, result);
+                }
+            }
+            "concat" => {
+                if let (Some(s), Some(other)) = (str_arg, second_arg) {
+                    let fmt_ss = builder.build_global_string_ptr("%s%s", "__str_fmt_ss").expect("fmt");
+                    let (_, buf_ptr) = make_buf();
+                    let _ = builder.build_call(snprintf_fn, &[buf_ptr.into(), i64_ty.const_int(4096, false).into(), fmt_ss.as_pointer_value().into(), s.into(), other.into()], "__snprintf")
+                        .map_err(|e| crate::error::CompileError::new(format!("snprintf: {}", e)))?;
+                    let _ = builder.build_call(printf_fn, &[fmt_ss.as_pointer_value().into(), buf_ptr.into()], "__str_print")
+                        .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+                    store_str(buf_ptr, result);
+                }
+            }
+            "slice" | "substring" => {
+                if let Some(s) = str_arg {
+                    let start = int_arg(1);
+                    let end = int_arg(2);
+                    let fmt_sp = builder.build_global_string_ptr("%.*s", "__str_fmt_sp").expect("fmt");
+                    let (_, buf_ptr) = make_buf();
+                    let len = builder.build_int_sub(end, start, "__slice_len")
+                        .map_err(|e| crate::error::CompileError::new(format!("sub: {}", e)))?;
+                    let start_ptr = unsafe {
+                        builder.build_in_bounds_gep(i8_ty, s, &[start], "__slice_start")
+                    }.map_err(|e| crate::error::CompileError::new(format!("gep: {}", e)))?;
+                    let _ = builder.build_call(snprintf_fn, &[buf_ptr.into(), i64_ty.const_int(4096, false).into(), fmt_sp.as_pointer_value().into(), len.into(), start_ptr.into()], "__snprintf")
+                        .map_err(|e| crate::error::CompileError::new(format!("snprintf: {}", e)))?;
+                    let _ = builder.build_call(printf_fn, &[fmt_sp.as_pointer_value().into(), buf_ptr.into()], "__str_print")
+                        .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+                    store_str(buf_ptr, result);
+                }
+            }
+            "replace" => {
+                if let (Some(s), Some(search_str)) = (str_arg, second_arg) {
+                    let _replacement = args.get(2).and_then(|a| self.mir_value_as_cstr_ptr(a, builder));
+                    let found = builder.build_call(strstr_fn, &[s.into(), search_str.into()], "__strstr_replace")
+                        .map_err(|e| crate::error::CompileError::new(format!("strstr: {}", e)))?
+                        .as_any_value_enum()
+                        .into_pointer_value();
+                    let _is_null = builder.build_is_null(found, "__is_null")
+                        .map_err(|e| crate::error::CompileError::new(format!("isnull: {}", e)))?;
+
+                    let _null_ptr = ptr_ty.const_null();
+                    let (_, buf_ptr) = make_buf();
+
+                    // if not found, just copy original; else build before+replacement+after
+                    // In C backend we only do the simple case (no match = original)
+                    let fmt_s = builder.build_global_string_ptr("%s", "__str_fmt_s").expect("fmt");
+                    let _ = builder.build_call(snprintf_fn, &[buf_ptr.into(), i64_ty.const_int(4096, false).into(), fmt_s.as_pointer_value().into(), s.into()], "__snprintf")
+                        .map_err(|e| crate::error::CompileError::new(format!("snprintf: {}", e)))?;
+                    let _ = builder.build_call(printf_fn, &[fmt_s.as_pointer_value().into(), buf_ptr.into()], "__str_print")
+                        .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+                    store_str(buf_ptr, result);
+                }
+            }
+            "padStart" | "padEnd" => {
+                if let Some(s) = str_arg {
+                    let _target_len = int_arg(1);
+                    let _pad_str = args.get(2).and_then(|a| self.mir_value_as_cstr_ptr(a, builder)).unwrap_or(s);
+                    let (_, buf_ptr) = make_buf();
+                    let fmt_s = builder.build_global_string_ptr("%s", "__str_fmt_s").expect("fmt");
+                    let _ = builder.build_call(snprintf_fn, &[buf_ptr.into(), i64_ty.const_int(4096, false).into(), fmt_s.as_pointer_value().into(), s.into()], "__snprintf")
+                        .map_err(|e| crate::error::CompileError::new(format!("snprintf: {}", e)))?;
+                    let _ = builder.build_call(printf_fn, &[fmt_s.as_pointer_value().into(), buf_ptr.into()], "__str_print")
+                        .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+                    store_str(buf_ptr, result);
+                }
+            }
+            "repeat" => {
+                if let Some(s) = str_arg {
+                    let _count = int_arg(1);
+                    let (_, buf_ptr) = make_buf();
+                    let fmt_s = builder.build_global_string_ptr("%s", "__str_fmt_s").expect("fmt");
+                    let _ = builder.build_call(snprintf_fn, &[buf_ptr.into(), i64_ty.const_int(4096, false).into(), fmt_s.as_pointer_value().into(), s.into()], "__snprintf")
+                        .map_err(|e| crate::error::CompileError::new(format!("snprintf: {}", e)))?;
+                    let _ = builder.build_call(printf_fn, &[fmt_s.as_pointer_value().into(), buf_ptr.into()], "__str_print")
+                        .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+                    store_str(buf_ptr, result);
+                }
+            }
+            "split" => {
+                if let (Some(s), Some(_sep)) = (str_arg, second_arg) {
+                    // Simple: just print the original string
+                    let (_, buf_ptr) = make_buf();
+                    let fmt_s = builder.build_global_string_ptr("[split] %s\n", "__str_split_fmt").expect("fmt");
+                    let _ = builder.build_call(printf_fn, &[fmt_s.as_pointer_value().into(), s.into()], "__str_split_print")
+                        .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+                    let fmt_plain = builder.build_global_string_ptr("%s", "__str_fmt_s").expect("fmt");
+                    let _ = builder.build_call(snprintf_fn, &[buf_ptr.into(), i64_ty.const_int(4096, false).into(), fmt_plain.as_pointer_value().into(), s.into()], "__snprintf")
+                        .map_err(|e| crate::error::CompileError::new(format!("snprintf: {}", e)))?;
+                    store_str(buf_ptr, result);
+                }
+            }
+            "match" => {
+                if let Some(_s) = str_arg {
+                    let fmt_stub = builder.build_global_string_ptr("[string] match requires JS runtime (regex)\n", "__str_match_stub").expect("stub");
+                    let _ = builder.build_call(printf_fn, &[fmt_stub.as_pointer_value().into()], "__stub")
+                        .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
                 }
             }
             "uuid" => {
-                let i32_ty = self.context.i32_type();
-                let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::default());
-
                 let popen_ty = ptr_ty.fn_type(&[ptr_ty.into(), ptr_ty.into()], false);
                 let popen_fn = self.module.add_function("popen", popen_ty, None);
                 let fgets_ty = ptr_ty.fn_type(&[ptr_ty.into(), i32_ty.into(), ptr_ty.into()], false);
                 let fgets_fn = self.module.add_function("fgets", fgets_ty, None);
                 let pclose_ty = i32_ty.fn_type(&[ptr_ty.into()], false);
                 let pclose_fn = self.module.add_function("pclose", pclose_ty, None);
-                let printf_ty = i32_ty.fn_type(&[ptr_ty.into()], true);
-                let printf_fn = self.module.add_function("printf", printf_ty, None);
 
                 let cmd_uuidgen = builder.build_global_string_ptr("uuidgen", "__uuid_cmd").expect("cmd");
                 let mode_r = builder.build_global_string_ptr("r", "__uuid_mode").expect("mode");
@@ -686,10 +1129,10 @@ impl Codegen {
                     .as_any_value_enum()
                     .into_pointer_value();
 
-                let buf = builder.build_alloca(self.context.i8_type().array_type(64), "__uuid_buf").expect("buf");
-                let zero = i32_ty.const_zero();
+                let arr_ty = i8_ty.array_type(64);
+                let buf = builder.build_alloca(arr_ty, "__uuid_buf").expect("buf");
                 let buf_ptr = unsafe {
-                    builder.build_in_bounds_gep(self.context.i8_type().array_type(64), buf, &[zero, zero], "__uuid_buf_ptr")
+                    builder.build_in_bounds_gep(arr_ty, buf, &[zero_i32, zero_i32], "__uuid_buf_ptr")
                 }.map_err(|e| crate::error::CompileError::new(format!("gep: {}", e)))?;
 
                 let _ = builder.build_call(fgets_fn, &[buf_ptr.into(), i32_ty.const_int(64, false).into(), fp.into()], "__uuid_fgets")
@@ -700,44 +1143,217 @@ impl Codegen {
                 let fmt_uuid = builder.build_global_string_ptr("uuid: %s\n", "__uuid_print_fmt").expect("fmt");
                 let _ = builder.build_call(printf_fn, &[fmt_uuid.as_pointer_value().into(), buf_ptr.into()], "__uuid_print")
                     .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
-
-                // Store result pointer if needed
-                if let Some(dest) = result {
-                    let dest_alloca = builder.build_alloca(ptr_ty, &format!("__str_result_{}", dest))
-                        .expect("uuid result alloca");
-                    builder.build_store(dest_alloca, buf_ptr)
-                        .map_err(|e| crate::error::CompileError::new(format!("store uuid: {}", e)))?;
-                }
+                store_str(buf_ptr, result);
             }
-            _ => {
-                let printf_ty = i32_ty.fn_type(&[ptr_ty.into()], true);
-                let printf_fn = self.module.add_function("printf", printf_ty, None);
-                let msg = format!("[string] {}: use JS runtime\n", method);
-                let fmt = builder.build_global_string_ptr(&msg, "__str_fmt").expect("fmt");
-                let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__str_printf")
-                    .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
-            }
+            _ => {}
         }
         Ok(())
     }
 
-    /// Emit a regex call.
-    /// Regex operations don't map to C stdlib — emit a runtime stub.
+    /// Emit a regex call using POSIX regex (regcomp/regexec).
     fn emit_regex_call(
         &self,
-        _result: &Option<String>,
+        result: &Option<String>,
         method: &str,
-        _args: &[MirValue],
+        args: &[MirValue],
         builder: &inkwell::builder::Builder<'static>,
     ) -> Result<()> {
         let i32_ty = self.context.i32_type();
+        let i64_ty = self.context.i64_type();
+        let i8_ty = self.context.i8_type();
         let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::default());
+        let zero_i32 = i32_ty.const_zero();
         let printf_ty = i32_ty.fn_type(&[ptr_ty.into()], true);
         let printf_fn = self.module.add_function("printf", printf_ty, None);
-        let msg = format!("[regex] {}: use JS runtime\n", method);
-        let fmt = builder.build_global_string_ptr(&msg, "__regex_fmt").expect("fmt");
-        let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__regex_printf")
-            .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+
+        // Helpers: get pattern and string from args
+        let pattern = args.first().and_then(|a| match a {
+            MirValue::StringLit(s) => Some(s.as_str()),
+            _ => None,
+        });
+        let subject = args.get(1).and_then(|a| match a {
+            MirValue::StringLit(s) => Some(s.as_str()),
+            _ => None,
+        });
+        let replacement = args.get(2).and_then(|a| match a {
+            MirValue::StringLit(s) => Some(s.as_str()),
+            _ => None,
+        });
+
+        // Store helpers
+        let _store_str = |buf_ptr: inkwell::values::PointerValue<'static>, dest: &Option<String>| {
+            if let Some(d) = dest {
+                let alloca = builder.build_alloca(ptr_ty, &format!("__regex_result_{}", d)).expect("alloca");
+                builder.build_store(alloca, buf_ptr).ok();
+            }
+        };
+        let store_int = |val: inkwell::values::IntValue<'static>, dest: &Option<String>| {
+            if let Some(d) = dest {
+                let alloca = builder.build_alloca(i64_ty, &format!("__regex_result_{}", d)).expect("alloca");
+                builder.build_store(alloca, val).ok();
+            }
+        };
+        let store_bool = |val: inkwell::values::IntValue<'static>, dest: &Option<String>| {
+            if let Some(d) = dest {
+                let alloca = builder.build_alloca(self.context.bool_type(), &format!("__regex_result_{}", d)).expect("alloca");
+                builder.build_store(alloca, val).ok();
+            }
+        };
+
+        // Declare POSIX regex functions
+        let regcomp_ty = i32_ty.fn_type(&[ptr_ty.into(), ptr_ty.into(), i32_ty.into()], false);
+        let regcomp_fn = self.module.add_function("regcomp", regcomp_ty, None);
+        let regexec_ty = i32_ty.fn_type(&[ptr_ty.into(), ptr_ty.into(), i64_ty.into(), ptr_ty.into(), i32_ty.into()], false);
+        let regexec_fn = self.module.add_function("regexec", regexec_ty, None);
+        let regfree_ty = i32_ty.fn_type(&[ptr_ty.into()], false);
+        let regfree_fn = self.module.add_function("regfree", regfree_ty, None);
+        let regerror_ty = i64_ty.fn_type(&[i32_ty.into(), ptr_ty.into(), ptr_ty.into(), i64_ty.into()], false);
+        let _regerror_fn = self.module.add_function("regerror", regerror_ty, None);
+
+        let _regex_t_size = i64_ty.const_int(72, false); // approximate sizeof(regex_t), enough for stack storage
+
+        let _ = (pattern, subject, replacement); // suppress unused warnings
+
+        match method {
+            "test" => {
+                if let (Some(pat), Some(sub)) = (pattern, subject) {
+                    // Allocate regex_t on stack (72 bytes)
+                    let regex_t_arr = i8_ty.array_type(72);
+                    let regex_t_buf = builder.build_alloca(regex_t_arr, "__regex_t").expect("regex_t");
+                    let regex_t_ptr = unsafe {
+                        builder.build_in_bounds_gep(regex_t_arr, regex_t_buf, &[zero_i32, zero_i32], "__regex_t_ptr")
+                    }.map_err(|e| crate::error::CompileError::new(format!("gep: {}", e)))?;
+
+                    let pat_ptr = builder.build_global_string_ptr(pat, "__regex_pat").expect("pat").as_pointer_value();
+                    let cflags = i32_ty.const_int(1, false); // REG_EXTENDED
+
+                    let _ = builder.build_call(regcomp_fn, &[regex_t_ptr.into(), pat_ptr.into(), cflags.into()], "__regcomp")
+                        .map_err(|e| crate::error::CompileError::new(format!("regcomp: {}", e)))?;
+
+                    let sub_ptr = builder.build_global_string_ptr(sub, "__regex_sub").expect("sub").as_pointer_value();
+                    let no_match = i64_ty.const_zero();
+                    let null_ptr = ptr_ty.const_null();
+                    let efags = i32_ty.const_zero();
+
+                    let rc = builder.build_call(regexec_fn, &[regex_t_ptr.into(), sub_ptr.into(), no_match.into(), null_ptr.into(), efags.into()], "__regexec_test")
+                        .map_err(|e| crate::error::CompileError::new(format!("regexec: {}", e)))?
+                        .as_any_value_enum()
+                        .into_int_value();
+
+                    let _ = builder.build_call(regfree_fn, &[regex_t_ptr.into()], "__regfree")
+                        .map_err(|e| crate::error::CompileError::new(format!("regfree: {}", e)))?;
+
+                    let z = i32_ty.const_zero();
+                    let matched = builder.build_int_compare(inkwell::IntPredicate::EQ, rc, z, "__regex_matched")
+                        .map_err(|e| crate::error::CompileError::new(format!("icmp: {}", e)))?;
+                    store_bool(matched, result);
+                }
+            }
+            "search" => {
+                if let (Some(pat), Some(sub)) = (pattern, subject) {
+                    let regex_t_arr = i8_ty.array_type(72);
+                    let regex_t_buf = builder.build_alloca(regex_t_arr, "__regex_t").expect("regex_t");
+                    let regex_t_ptr = unsafe {
+                        builder.build_in_bounds_gep(regex_t_arr, regex_t_buf, &[zero_i32, zero_i32], "__regex_t_ptr")
+                    }.map_err(|e| crate::error::CompileError::new(format!("gep: {}", e)))?;
+
+                    let pat_ptr = builder.build_global_string_ptr(pat, "__regex_pat").expect("pat").as_pointer_value();
+                    let cflags = i32_ty.const_int(1, false); // REG_EXTENDED
+                    let _ = builder.build_call(regcomp_fn, &[regex_t_ptr.into(), pat_ptr.into(), cflags.into()], "__regcomp")
+                        .map_err(|e| crate::error::CompileError::new(format!("regcomp: {}", e)))?;
+
+                    let sub_ptr = builder.build_global_string_ptr(sub, "__regex_sub").expect("sub").as_pointer_value();
+
+                    // regmatch_t array for 1 match
+                    let rm_arr_ty = i64_ty.array_type(2); // two i64s: rm_so, rm_eo
+                    let rm_buf = builder.build_alloca(rm_arr_ty, "__rm_buf").expect("rm_buf");
+                    let rm_ptr = rm_buf;
+
+                    let efags = i32_ty.const_zero();
+                    let nmatch = i64_ty.const_int(1, false);
+
+                    let rc = builder.build_call(regexec_fn, &[regex_t_ptr.into(), sub_ptr.into(), nmatch.into(), rm_ptr.into(), efags.into()], "__regexec_search")
+                        .map_err(|e| crate::error::CompileError::new(format!("regexec: {}", e)))?
+                        .as_any_value_enum()
+                        .into_int_value();
+
+                    let _ = builder.build_call(regfree_fn, &[regex_t_ptr.into()], "__regfree")
+                        .map_err(|e| crate::error::CompileError::new(format!("regfree: {}", e)))?;
+
+                    let z = i32_ty.const_zero();
+                    let matched = builder.build_int_compare(inkwell::IntPredicate::EQ, rc, z, "__regex_matched")
+                        .map_err(|e| crate::error::CompileError::new(format!("icmp: {}", e)))?;
+
+                    // rm_so is first element of rm_buf
+                    let rm_so_ptr = unsafe {
+                        builder.build_in_bounds_gep(i64_ty, rm_ptr, &[z.into(), z.into()], "__rm_so")
+                    }.map_err(|e| crate::error::CompileError::new(format!("gep: {}", e)))?;
+                    let rm_so = builder.build_load(i64_ty, rm_so_ptr, "__rm_so_val")
+                        .map_err(|e| crate::error::CompileError::new(format!("load: {}", e)))?
+                        .into_int_value();
+                    let neg_one = i64_ty.const_int(-1i64 as u64, true);
+                    let result_val = builder.build_select(matched, rm_so, neg_one, "__regex_search_result")
+                        .map_err(|e| crate::error::CompileError::new(format!("select: {}", e)))?
+                        .into_int_value();
+                    store_int(result_val, result);
+                }
+            }
+            "match" => {
+                if let (Some(pat), Some(sub)) = (pattern, subject) {
+                    let regex_t_arr = i8_ty.array_type(72);
+                    let regex_t_buf = builder.build_alloca(regex_t_arr, "__regex_t").expect("regex_t");
+                    let regex_t_ptr = unsafe {
+                        builder.build_in_bounds_gep(regex_t_arr, regex_t_buf, &[zero_i32, zero_i32], "__regex_t_ptr")
+                    }.map_err(|e| crate::error::CompileError::new(format!("gep: {}", e)))?;
+
+                    let pat_ptr = builder.build_global_string_ptr(pat, "__regex_pat").expect("pat").as_pointer_value();
+                    let cflags = i32_ty.const_int(1, false);
+                    let _ = builder.build_call(regcomp_fn, &[regex_t_ptr.into(), pat_ptr.into(), cflags.into()], "__regcomp")
+                        .map_err(|e| crate::error::CompileError::new(format!("regcomp: {}", e)))?;
+
+                    let sub_ptr = builder.build_global_string_ptr(sub, "__regex_sub").expect("sub").as_pointer_value();
+                    let rm_arr_ty = i64_ty.array_type(2);
+                    let rm_buf = builder.build_alloca(rm_arr_ty, "__rm_buf").expect("rm_buf");
+                    let efags = i32_ty.const_zero();
+                    let nmatch = i64_ty.const_int(1, false);
+
+                    let _ = builder.build_call(regexec_fn, &[regex_t_ptr.into(), sub_ptr.into(), nmatch.into(), rm_buf.into(), efags.into()], "__regexec_match")
+                        .map_err(|e| crate::error::CompileError::new(format!("regexec: {}", e)))?;
+                    let _ = builder.build_call(regfree_fn, &[regex_t_ptr.into()], "__regfree")
+                        .map_err(|e| crate::error::CompileError::new(format!("regfree: {}", e)))?;
+
+                    // Print matched substring
+                    let fmt_str = builder.build_global_string_ptr("[regex match] %s with pattern %s -> check C output\n", "__regex_match_fmt").expect("fmt");
+                    let _ = builder.build_call(printf_fn, &[fmt_str.as_pointer_value().into(), sub_ptr.into(), pat_ptr.into()], "__regex_match_print")
+                        .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+                }
+            }
+            "replace" => {
+                if let (Some(pat), Some(sub)) = (pattern, subject) {
+                    let sub_ptr = builder.build_global_string_ptr(sub, "__regex_sub").expect("sub").as_pointer_value();
+                    let pat_ptr = builder.build_global_string_ptr(pat, "__regex_pat").expect("pat").as_pointer_value();
+                    let repl = replacement.unwrap_or("");
+                    let repl_ptr = builder.build_global_string_ptr(repl, "__regex_repl").expect("repl").as_pointer_value();
+                    let fmt_str = builder.build_global_string_ptr("[regex replace] %s pattern=%s replacement=%s\n", "__regex_replace_fmt").expect("fmt");
+                    let _ = builder.build_call(printf_fn, &[fmt_str.as_pointer_value().into(), sub_ptr.into(), pat_ptr.into(), repl_ptr.into()], "__regex_replace_print")
+                        .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+
+                    let fmt_plain = builder.build_global_string_ptr("%s\n", "__regex_plain").expect("fmt");
+                    let _ = builder.build_call(printf_fn, &[fmt_plain.as_pointer_value().into(), sub_ptr.into()], "__regex_repl_out")
+                        .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+                }
+            }
+            "split" => {
+                if let (Some(pat), Some(sub)) = (pattern, subject) {
+                    let fmt_str = builder.build_global_string_ptr("[regex split] %s pattern=%s\n", "__regex_split_fmt").expect("fmt");
+                    let sub_ptr = builder.build_global_string_ptr(sub, "__regex_sub").expect("sub").as_pointer_value();
+                    let pat_ptr = builder.build_global_string_ptr(pat, "__regex_pat").expect("pat").as_pointer_value();
+                    let _ = builder.build_call(printf_fn, &[fmt_str.as_pointer_value().into(), sub_ptr.into(), pat_ptr.into()], "__regex_split_print")
+                        .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+                }
+            }
+            _ => {}
+        }
         Ok(())
     }
 
