@@ -144,3 +144,19 @@ The `question` keyword was chosen over `oq` or `concern` because it's the most i
 - Codegen (`emit_fs_call`): calls C stdlib functions directly (`fopen`, `fgets`/`fputs`, `fclose`, `remove`, `access`, `mkdir`, `rmdir`, `rename`)
 - JS runtime `npm-package/runtime/fs.js` maps to Node's native `fs` module (readFileSync, writeFileSync, etc.)
 - Exported via `require('elysium-lang').fs`
+
+### Transport Package (added May 2026)
+- Networking utilities via `transport.` method-call syntax: HTTP, WebSocket, MQTT
+- Desugaring in `main.rs` (`desugar_builtin_calls`) converts `transport.method(...)` → `__transport_method(...)`
+- Type checker registers `__transport_*` builtins with typed signatures:
+  - HTTP: `get(url: String) → String`, `post/put(url: String, body: String) → String`, `delete(url: String) → String`
+  - WebSocket: `wsConnect(url: String) → String`, `wsSend(conn: String, data: String) → Nil`, `wsClose(conn: String) → Nil`
+  - MQTT: `mqttConnect(broker: String, clientId: String) → String`, `mqttPublish(client: String, topic: String, msg: String) → Nil`, `mqttSubscribe(client: String, topic: String) → Nil`, `mqttDisconnect(client: String) → Nil`
+- MIR: Uses `MirStmt::TransportCall { result, method, args, dbg_line }` for both void and return-value contexts
+- Codegen (`emit_transport_call`): prints a stub message `[transport] method: use JS runtime\n` — transport is JS-runtime-only
+- JS runtime `npm-package/runtime/transport.js` provides:
+  - **HTTP** via `get`, `post`, `put`, `delete` using `fetch` (Node 18+ / browser) or `node-fetch` polyfill
+  - **WebSocket** via `wsConnect`, `wsSend`, `wsClose` using `WebSocket` (browser) or `ws` package (Node)
+  - **MQTT** via `mqttConnect`, `mqttPublish`, `mqttSubscribe`, `mqttDisconnect` using `mqtt` package (Node-only)
+  - **Status codes** via `transport.status.OK`, `status.NOT_FOUND`, etc.
+- Exported via `require('elysium-lang').transport`

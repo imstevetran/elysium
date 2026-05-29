@@ -16,6 +16,7 @@ const channel = require('./channel');
 const ui = require('./ui');
 const consoleMod = require('./console');
 const fsMod = require('./fs');
+const transportMod = require('./transport');
 
 module.exports = {
   // ARC
@@ -43,4 +44,7 @@ module.exports = {
 
   // File system
   fs: fsMod,
+
+  // Transport (HTTP, WebSocket, MQTT)
+  transport: transportMod,
 };

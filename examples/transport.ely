@@ -1,0 +1,26 @@
+// Test transport operations via the transport package
+// Supports HTTP (get/post/put/delete), WebSocket (connect/send/close), MQTT (connect/publish/subscribe/disconnect)
+//
+// Backend (compiled binary): prints stub messages via printf
+// JS runtime: uses native fetch, WebSocket, and mqtt.js
+
+func main() {
+    // HTTP
+    transport.get("https://api.example.com/data")
+    transport.post("https://api.example.com/data", "{\"key\":\"value\"}")
+    transport.put("https://api.example.com/data/1", "{\"key\":\"updated\"}")
+    transport.delete("https://api.example.com/data/1")
+
+    // WebSocket
+    let ws = transport.wsConnect("wss://echo.example.com")
+    transport.wsSend(ws, "hello from Elysium")
+    transport.wsClose(ws)
+
+    // MQTT
+    let client = transport.mqttConnect("mqtt://broker.example.com", "elysium-client")
+    transport.mqttPublish(client, "topic/hello", "world")
+    transport.mqttSubscribe(client, "topic/#")
+    transport.mqttDisconnect(client)
+
+    print("transport operations completed\n")
+}

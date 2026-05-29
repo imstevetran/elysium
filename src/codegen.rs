@@ -123,6 +123,7 @@ impl Codegen {
             MirStmt::Bench { dbg_line, .. } => *dbg_line,
             MirStmt::ConsoleCall { dbg_line, .. } => *dbg_line,
             MirStmt::FsCall { dbg_line, .. } => *dbg_line,
+            MirStmt::TransportCall { dbg_line, .. } => *dbg_line,
             _ => func.dbg_line,
         };
 
@@ -152,6 +153,9 @@ impl Codegen {
             }
             MirStmt::FsCall { result, method, args, dbg_line: _ } => {
                 self.emit_fs_call(result, method, args, builder, func)?;
+            }
+            MirStmt::TransportCall { result, method, args, dbg_line: _ } => {
+                self.emit_transport_call(result, method, args, builder)?;
             }
             _ => {}
         }
@@ -571,6 +575,27 @@ impl Codegen {
             }
             _ => {}
         }
+        Ok(())
+    }
+
+    /// Emit a transport call (HTTP, WebSocket, MQTT).
+    /// Since these operations don't map to C stdlib, emit a runtime stub
+    /// that prints a message. The real implementation lives in the JS runtime.
+    fn emit_transport_call(
+        &self,
+        _result: &Option<String>,
+        method: &str,
+        _args: &[MirValue],
+        builder: &inkwell::builder::Builder<'static>,
+    ) -> Result<()> {
+        let i32_ty = self.context.i32_type();
+        let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::default());
+        let printf_ty = i32_ty.fn_type(&[ptr_ty.into()], true);
+        let printf_fn = self.module.add_function("printf", printf_ty, None);
+        let msg = format!("[transport] {}: use JS runtime\n", method);
+        let fmt = builder.build_global_string_ptr(&msg, "__transport_fmt").expect("fmt");
+        let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__transport_printf")
+            .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
         Ok(())
     }
 }

@@ -81,6 +81,14 @@ pub enum MirStmt {
         args: Vec<MirValue>,
         dbg_line: u32,
     },
+    /// Transport call (HTTP, WebSocket, MQTT). When `result` is Some(name), the return
+    /// value is stored into that alloca.
+    TransportCall {
+        result: Option<String>,
+        method: String,
+        args: Vec<MirValue>,
+        dbg_line: u32,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -242,6 +250,17 @@ impl MirLowerer {
                                     });
                                     return;
                                 }
+                                if cname.starts_with("__transport_") {
+                                    let method = cname.strip_prefix("__transport_").unwrap_or(cname).to_string();
+                                    let mir_args: Vec<MirValue> = args.iter().map(|a| self.lower_expr(a)).collect();
+                                    stmts.push(MirStmt::TransportCall {
+                                        result: Some(name.clone()),
+                                        method,
+                                        args: mir_args,
+                                        dbg_line: line,
+                                    });
+                                    return;
+                                }
                             }
                         }
                         stmts.push(MirStmt::Store {
@@ -280,6 +299,17 @@ impl MirLowerer {
                             let mir_args: Vec<MirValue> = args.iter().map(|a| self.lower_expr(a)).collect();
                             stmts.push(MirStmt::FsCall {
                                 result: None, // void context
+                                method,
+                                args: mir_args,
+                                dbg_line: line,
+                            });
+                            return;
+                        }
+                        if name.starts_with("__transport_") {
+                            let method = name.strip_prefix("__transport_").unwrap_or(name).to_string();
+                            let mir_args: Vec<MirValue> = args.iter().map(|a| self.lower_expr(a)).collect();
+                            stmts.push(MirStmt::TransportCall {
+                                result: None,
                                 method,
                                 args: mir_args,
                                 dbg_line: line,

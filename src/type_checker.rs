@@ -132,6 +132,56 @@ impl TypeChecker {
                 );
             }
         }
+        // transport.* builtins (HTTP, WebSocket, MQTT)
+        {
+            let http_sigs: &[(&str, Vec<Type>, Type)] = &[
+                ("__transport_get", vec![Type::String], Type::String),
+                ("__transport_post", vec![Type::String, Type::String], Type::String),
+                ("__transport_put", vec![Type::String, Type::String], Type::String),
+                ("__transport_delete", vec![Type::String], Type::String),
+            ];
+            for (name, param_types, ret_ty) in http_sigs {
+                self.functions.insert(
+                    name.to_string(),
+                    FunctionSignature {
+                        param_types: param_types.clone(),
+                        return_type: Box::new(ret_ty.clone()),
+                        is_async: false,
+                    },
+                );
+            }
+            let ws_sigs: &[(&str, Vec<Type>, Type)] = &[
+                ("__transport_wsConnect", vec![Type::String], Type::String),
+                ("__transport_wsSend", vec![Type::String, Type::String], Type::Nil),
+                ("__transport_wsClose", vec![Type::String], Type::Nil),
+            ];
+            for (name, param_types, ret_ty) in ws_sigs {
+                self.functions.insert(
+                    name.to_string(),
+                    FunctionSignature {
+                        param_types: param_types.clone(),
+                        return_type: Box::new(ret_ty.clone()),
+                        is_async: false,
+                    },
+                );
+            }
+            let mqtt_sigs: &[(&str, Vec<Type>, Type)] = &[
+                ("__transport_mqttConnect", vec![Type::String, Type::String], Type::String),
+                ("__transport_mqttPublish", vec![Type::String, Type::String], Type::Nil),
+                ("__transport_mqttSubscribe", vec![Type::String], Type::Nil),
+                ("__transport_mqttDisconnect", vec![], Type::Nil),
+            ];
+            for (name, param_types, ret_ty) in mqtt_sigs {
+                self.functions.insert(
+                    name.to_string(),
+                    FunctionSignature {
+                        param_types: param_types.clone(),
+                        return_type: Box::new(ret_ty.clone()),
+                        is_async: false,
+                    },
+                );
+            }
+        }
         self.functions.insert(
             "sum".into(),
             FunctionSignature {

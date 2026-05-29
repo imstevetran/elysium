@@ -625,6 +625,7 @@ fn desugar_builtin_in_expr(expr: &mut ast::Expr) {
                 let prefix = match obj_name.as_str() {
                     "console" => "__console_",
                     "fs" => "__fs_",
+                    "transport" => "__transport_",
                     _ => "",
                 };
                 if !prefix.is_empty() {
