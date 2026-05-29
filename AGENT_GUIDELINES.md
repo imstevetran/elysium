@@ -33,6 +33,7 @@ The `question` keyword was chosen over `oq` or `concern` because it's the most i
 - `epm search <query>` — search registry by name or description
 - `epm info <package>` — show package details and versions
 - `epm tree` — show the flat dependency tree (reads `elysium.lock` first if available)
+- `epm why <package>` — trace dependency paths from root to a package, showing how it's pulled in
 - `epm shake [--dry-run]` — tree-shake installed packages (remove unreachable .ely files)
 - `epm install --shake` — install and tree-shake in one step
 - `epm login <token>` — store GitHub PAT for publish auth

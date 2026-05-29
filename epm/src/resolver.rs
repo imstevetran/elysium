@@ -9,6 +9,13 @@ pub struct ResolvedDep {
     pub version: String,
 }
 
+/// A chain of dependencies showing how a package is pulled in.
+#[derive(Debug, Clone)]
+pub struct DependencyPath {
+    /// The chain from root → intermediate → ... → target, as (name, version, constraint) tuples.
+    pub chain: Vec<(String, String, String)>,
+}
+
 /// The flat dependency resolution — maps each package name to its chosen version.
 /// In single-version mode (default), each name appears at most once.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -285,5 +292,79 @@ pub fn write_lockfile(project_dir: &std::path::Path, resolution: &Resolution) ->
         .map_err(|e| format!("Cannot serialize lockfile: {}", e))?;
     std::fs::write(&lock_path, content)
         .map_err(|e| format!("Cannot write elysium.lock: {}", e))?;
+    Ok(())
+}
+
+/// Trace all dependency paths from the root package to the given target package.
+///
+/// Returns a list of paths, where each path is a chain from root → ... → target.
+/// Each link in the chain is (package_name, version, constraint_that_required_it).
+pub fn trace_dep(
+    root_name: &str,
+    root_version: &str,
+    deps: &HashMap<String, String>,
+    target: &str,
+) -> Result<Vec<DependencyPath>, String> {
+    let mut paths = Vec::new();
+    let mut current_chain = Vec::new();
+    // Push root as implicit starting point
+    current_chain.push((root_name.to_string(), root_version.to_string(), "(root)".to_string()));
+
+    trace_dep_recursive(deps, target, &mut current_chain, &mut paths, 0)?;
+
+    // Remove the root entry we added; the traces start from root deps
+    for path in &mut paths {
+        path.chain.remove(0);
+    }
+
+    Ok(paths)
+}
+
+fn trace_dep_recursive(
+    deps: &HashMap<String, String>,
+    target: &str,
+    current_chain: &mut Vec<(String, String, String)>,
+    paths: &mut Vec<DependencyPath>,
+    depth: usize,
+) -> Result<(), String> {
+    const MAX_DEPTH: usize = 50;
+    if depth > MAX_DEPTH {
+        return Ok(());
+    }
+
+    for (dep_name, dep_req) in deps {
+        let best = pick_best_version(dep_name, &[dep_req.as_str()])?;
+
+        // Cycle detection: if this package name is already in the current chain, skip
+        if current_chain.iter().any(|(name, _, _)| name == dep_name) {
+            continue;
+        }
+
+        // Push the current step onto the chain
+        let chain_entry = (dep_name.clone(), best.clone(), dep_req.clone());
+        current_chain.push(chain_entry);
+
+        if dep_name == target {
+            // Found the target — record the full chain
+            paths.push(DependencyPath {
+                chain: current_chain.clone(),
+            });
+        } else {
+            // Recurse into transitive deps
+            let sub_manifest = get_cached_manifest(dep_name, &best)?;
+            if !sub_manifest.dependencies.is_empty() {
+                trace_dep_recursive(
+                    &sub_manifest.dependencies,
+                    target,
+                    current_chain,
+                    paths,
+                    depth + 1,
+                )?;
+            }
+        }
+
+        current_chain.pop();
+    }
+
     Ok(())
 }

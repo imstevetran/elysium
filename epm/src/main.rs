@@ -35,6 +35,9 @@ fn main() {
         cli::Commands::Shake { dry_run } => {
             cmd_shake(*dry_run)
         }
+        cli::Commands::Why { package } => {
+            cmd_why(package)
+        }
         cli::Commands::Login { token } => {
             cmd_login(token)
         }
@@ -389,6 +392,47 @@ fn cmd_shake(dry_run: bool) -> Result<(), String> {
 
     if dry_run && report.removed_files > 0 {
         println!("\nRun `epm shake` (without --dry-run) to actually remove these files.");
+    }
+
+    Ok(())
+}
+
+fn cmd_why(package: &str) -> Result<(), String> {
+    let cwd = std::env::current_dir().map_err(|e| format!("Cannot get current dir: {}", e))?;
+    let manifest = manifest::Manifest::load_from_dir(&cwd)?;
+
+    if manifest.dependencies.is_empty() {
+        println!("No dependencies in this project.");
+        return Ok(());
+    }
+
+    println!("Tracing why {} is required...\n", package);
+
+    let paths = resolver::trace_dep(
+        &manifest.name,
+        &manifest.version,
+        &manifest.dependencies,
+        package,
+    )?;
+
+    if paths.is_empty() {
+        println!("'{}' is not a dependency (direct or transitive) of this project.", package);
+        return Ok(());
+    }
+
+    for (i, path) in paths.iter().enumerate() {
+        println!("Path #{}:", i + 1);
+        if path.chain.len() == 1 {
+            // Only the package itself — direct dependency
+            let (name, ver, constraint) = &path.chain[0];
+            println!("  (direct) {}@{}  required as \"{}\" in elysium.json", name, ver, constraint);
+        } else {
+            for (j, (name, ver, constraint)) in path.chain.iter().enumerate() {
+                let indent = "  ".repeat(j + 1);
+                println!("{}{}@{}  (required as \"{}\")", indent, name, ver, constraint);
+            }
+        }
+        println!();
     }
 
     Ok(())

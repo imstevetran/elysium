@@ -82,6 +82,12 @@ pub enum Commands {
         dry_run: bool,
     },
 
+    /// Trace why a dependency is included (show dependency paths)
+    Why {
+        /// Package name to trace
+        package: String,
+    },
+
     /// Log in to the registry (stores GitHub token)
     Login {
         /// GitHub personal access token
