@@ -19,5 +19,9 @@ elysium_modules/
 elysium.lock
 .env
 
+# npm package
+npm-package/dist/
+npm-package/node_modules/
+
 # macOS
 .DS_Store

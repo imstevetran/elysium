@@ -1,0 +1,3 @@
+# Ignore build scripts and dist artifacts in published package
+dist/
+node_modules/

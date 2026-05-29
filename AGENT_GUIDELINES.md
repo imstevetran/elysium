@@ -50,6 +50,23 @@ The `question` keyword was chosen over `oq` or `concern` because it's the most i
   removes any `.ely` file not reachable via the import graph
 - `.env` support: `epm` loads `.env` from the current directory on every command. Use `--env-file <path>` to specify a different file. The token can also be set via `EPM_GIT_TOKEN` env var instead of `epm login`.
 
+### npm Package (`elysium-lang`)
+- Located in `npm-package/` directory
+- Published as `elysium-lang` on npm
+- Ships:
+  - **CLI binary** (`elysium` command) — the full Rust compiler, downloaded/built during `npm install`
+  - **JavaScript runtime** (`require('elysium-lang')`) — mirrors `elysium-rt` Rust crate as JS
+- **Runtime modules**:
+  - `arc.js` — `Ref`, `Weak`, `Unowned` (reference counting)
+  - `task.js` — `Task`, `Scheduler` (async task scheduling via `setImmediate`)
+  - `channel.js` — `Channel` (async message passing with `EventEmitter`)
+  - `ui.js` — `View`, `Style`, `ComponentState`, `diff`, `Patch`, `Axis` (virtual DOM diffing)
+- **Install flow** (`postinstall`):
+  1. Try to download prebuilt `.gz` binary from GitHub Releases (`imstevetran/elysium`)
+  2. Fall back to `cargo build --release` if no binary available
+- **Build for release**: `node scripts/build-binaries.js [--all]` — cross-compiles and gzips per-platform
+- Platform targets: `x86_64` and `aarch64` for macOS, Linux, Windows
+
 ### Flat Dependency Resolution (epm resolver)
 - Default mode: single version per package name
 - Resolution algorithm:

@@ -1,0 +1,41 @@
+{
+  "name": "elysium-lang",
+  "version": "0.1.0",
+  "description": "Elysium 2.0 — a human-friendly, AI-compatible programming language compiler and runtime",
+  "keywords": ["elysium", "language", "compiler", "runtime"],
+  "homepage": "https://github.com/imstevetran/elysium",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/imstevetran/elysium.git"
+  },
+  "license": "MIT",
+  "author": "Steve Tran",
+  "bin": {
+    "elysium": "./bin/elysium.js"
+  },
+  "main": "./runtime/index.js",
+  "exports": {
+    ".": "./runtime/index.js",
+    "./runtime": "./runtime/index.js",
+    "./runtime/arc": "./runtime/arc.js",
+    "./runtime/task": "./runtime/task.js",
+    "./runtime/channel": "./runtime/channel.js",
+    "./runtime/ui": "./runtime/ui.js"
+  },
+  "files": [
+    "bin/",
+    "runtime/",
+    "scripts/",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "postinstall": "node scripts/install.js",
+    "build-binaries": "node scripts/build-binaries.js"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "os": ["darwin", "linux", "win32"],
+  "cpu": ["x64", "arm64"]
+}
