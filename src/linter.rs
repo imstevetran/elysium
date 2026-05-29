@@ -171,6 +171,17 @@ impl<'a> Linter<'a> {
             );
         }
 
+        // For stub functions, skip body-related lints
+        if f.stub_envs.is_some() {
+            // Track the name
+            self.declared_names.push(ScopeEntry {
+                name: f.name.clone(),
+                offset: item.span.offset,
+                length: item.span.length,
+            });
+            return;
+        }
+
         // Rule: return-type — functions with bodies > 1 line should have explicit return types
         if f.body.statements.len() > 1 && f.return_type.is_none() {
             self.add_diag(

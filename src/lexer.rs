@@ -95,6 +95,8 @@ pub enum Token {
     Bench,
     #[token("bm")]
     Bm,
+    #[token("stub")]
+    Stub,
 
     // Literals
     #[regex("[0-9]+", |lex| lex.slice().parse().ok())]

@@ -23,6 +23,9 @@ pub enum Commands {
         /// Include DWARF debug info for debugging with lldb/gdb
         #[arg(long)]
         debug: bool,
+        /// Target environment for stub resolution (default: local)
+        #[arg(long, default_value = "local")]
+        env: String,
     },
     /// Run an Elysium source file (compile and execute)
     Run {
@@ -34,11 +37,17 @@ pub enum Commands {
         /// Generate an LLVM IR dump
         #[arg(long)]
         emit_ir: bool,
+        /// Target environment for stub resolution (default: local)
+        #[arg(long, default_value = "local")]
+        env: String,
     },
     /// Type-check an Elysium source file without compiling
     Check {
         /// Path to the .ely or .elyx source file
         file: PathBuf,
+        /// Target environment for stub resolution (default: local)
+        #[arg(long, default_value = "local")]
+        env: String,
     },
     /// Highlight an Elysium source file with syntax coloring
     Highlight {

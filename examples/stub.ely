@@ -1,0 +1,16 @@
+/// A stub function available in all environments
+func placeholder(x: Int) -> Int stub
+
+/// A stub function that only exists in local and dev environments
+func debugOnly(key: String) -> String stub: [local, dev]
+
+/// A real implementation active in test environment
+func testHelper() -> String stub: [test]
+
+/// A normal function (not a stub)
+func normalFunc() -> Int {
+    return 42
+}
+
+/// Bare stub (no env list) matches all environments
+func crossEnv() -> Float stub

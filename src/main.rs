@@ -16,6 +16,7 @@ mod parser;
 mod type_checker;
 
 use clap::Parser;
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -23,25 +24,28 @@ fn main() {
     let cli = cli::Cli::parse();
 
     let result = match &cli.command {
-        cli::Commands::Build { file, output, emit_ir, debug } => {
+        cli::Commands::Build { file, output, emit_ir, debug, env } => {
+            let env = resolve_env_alias(file, env);
             if is_elyx_file(file) {
                 build_elyx(file, output.clone(), *emit_ir)
             } else {
-                compile_file(file, output.clone(), *emit_ir, *debug)
+                compile_file(file, output.clone(), *emit_ir, *debug, &env)
             }
         }
-        cli::Commands::Run { file, debug, emit_ir } => {
+        cli::Commands::Run { file, debug, emit_ir, env } => {
+            let env = resolve_env_alias(file, env);
             if is_elyx_file(file) {
                 build_elyx(file, None, false)
             } else {
-                compile_and_run(file, *debug, *emit_ir)
+                compile_and_run(file, *debug, *emit_ir, &env)
             }
         }
-        cli::Commands::Check { file } => {
+        cli::Commands::Check { file, env } => {
+            let env = resolve_env_alias(file, env);
             if is_elyx_file(file) {
                 check_elyx(file)
             } else {
-                check_file(file)
+                check_file(file, &env)
             }
         }
         cli::Commands::Highlight { file, format, output } => {
@@ -419,32 +423,34 @@ fn compile_merged(
     Ok(())
 }
 
-fn compile_file(file: &PathBuf, output: Option<PathBuf>, emit_ir: bool, debug_enabled: bool) -> error::Result<()> {
+fn compile_file(file: &PathBuf, output: Option<PathBuf>, emit_ir: bool, debug_enabled: bool, env: &str) -> error::Result<()> {
     let file_path = file.to_string_lossy().to_string();
 
     let (source, program) = if has_imports(file)? {
         let (src, p, aliases) = load_with_imports(file)?;
-        (src, desugared_program(p, &aliases))
+        (src, filter_stubs(p, &aliases, env))
     } else {
         let source = read_source(file)?;
         let mut parser = parser::Parser::new(&source);
         let program = parser.parse_program()?;
+        let program = filter_stubs_raw(program, env);
         (source, program)
     };
 
     compile_merged(&source, &program, &file_path, debug_enabled, emit_ir, output)
 }
 
-fn compile_and_run(file: &PathBuf, debug_enabled: bool, emit_ir: bool) -> error::Result<()> {
+fn compile_and_run(file: &PathBuf, debug_enabled: bool, emit_ir: bool, env: &str) -> error::Result<()> {
     let file_path = file.to_string_lossy().to_string();
 
     let (source, program) = if has_imports(file)? {
         let (src, p, aliases) = load_with_imports(file)?;
-        (src, desugared_program(p, &aliases))
+        (src, filter_stubs(p, &aliases, env))
     } else {
         let source = read_source(file)?;
         let mut parser = parser::Parser::new(&source);
         let program = parser.parse_program()?;
+        let program = filter_stubs_raw(program, env);
         (source, program)
     };
 
@@ -453,14 +459,15 @@ fn compile_and_run(file: &PathBuf, debug_enabled: bool, emit_ir: bool) -> error:
     Ok(())
 }
 
-fn check_file(file: &PathBuf) -> error::Result<()> {
+fn check_file(file: &PathBuf, env: &str) -> error::Result<()> {
     let (source, program) = if has_imports(file)? {
         let (src, p, aliases) = load_with_imports(file)?;
-        (src, desugared_program(p, &aliases))
+        (src, filter_stubs(p, &aliases, env))
     } else {
         let source = read_source(file)?;
         let mut parser = parser::Parser::new(&source);
         let program = parser.parse_program()?;
+        let program = filter_stubs_raw(program, env);
         (source, program)
     };
 
@@ -472,6 +479,56 @@ fn check_file(file: &PathBuf) -> error::Result<()> {
 
     println!("Type check passed.");
     Ok(())
+}
+
+/// Resolve environment aliases from the project's elysium.json manifest.
+/// Supports built-in envs (local, dev, test, prod) and custom aliases
+/// defined in the `environments` field of the manifest.
+fn resolve_env_alias(file: &PathBuf, env: &str) -> String {
+    // Look for elysium.json in the same directory as the source file
+    let dir = file.parent().unwrap_or(Path::new("."));
+    let manifest_path = dir.join("elysium.json");
+    if let Ok(content) = fs::read_to_string(manifest_path) {
+        if let Ok(manifest) = serde_json::from_str::<HashMap<String, serde_json::Value>>(&content) {
+            if let Some(envs) = manifest.get("environments") {
+                if let Some(alias_map) = envs.as_object() {
+                    if let Some(resolved) = alias_map.get(env) {
+                        if let Some(val) = resolved.as_str() {
+                            return val.to_string();
+                        }
+                    }
+                }
+            }
+        }
+    }
+    env.to_string()
+}
+
+/// Filter out stub functions that don't match the target environment.
+/// When a function is `stub: [env1, env2]`, it is only kept if target env matches one of them.
+/// When a function is `stub` (no env list), it's a generic stub — kept for all envs (body is empty).
+fn filter_stubs(mut prog: ast::Program, aliases: &std::collections::HashSet<String>, env: &str) -> ast::Program {
+    desugar_module_calls(&mut prog, aliases);
+    filter_stubs_raw(prog, env)
+}
+
+fn filter_stubs_raw(mut program: ast::Program, env: &str) -> ast::Program {
+    program.items.retain(|item| {
+        match &item.value {
+            ast::Item::Function(f) => {
+                match &f.stub_envs {
+                    Some(envs) => {
+                        // Empty envs list = bare stub, keep for all envs
+                        // Non-empty list = only keep if target env is in the list
+                        envs.is_empty() || envs.iter().any(|e| e == env)
+                    }
+                    None => true, // Not a stub, always keep
+                }
+            }
+            _ => true, // Non-functions always kept
+        }
+    });
+    program
 }
 
 /// Apply alias desugaring to a program loaded with imports.

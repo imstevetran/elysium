@@ -56,6 +56,7 @@ fn token_kind(tok: &Token) -> Option<SpanKind> {
         | Token::Spec | Token::Describe | Token::Feat | Token::It | Token::Expect
         | Token::Todo | Token::KwQuestion
         | Token::Bench | Token::Bm
+        | Token::Stub
         | Token::True | Token::False | Token::Nil => Some(SpanKind::Keyword),
 
         // String literals

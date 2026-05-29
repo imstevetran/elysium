@@ -66,6 +66,7 @@ impl<'a> Parser<'a> {
                     is_async: false,
                     doc_comment: None,
                     bc_reason: None,
+                    stub_envs: None,
                 }),
                 saved_span,
             ));
@@ -106,7 +107,7 @@ impl<'a> Parser<'a> {
         self.expect(&Token::RParen)?;
         let return_type = self.parse_return_type()?;
         let bc_reason = self.parse_bc_annotation()?;
-        let body = self.parse_block()?;
+        let (stub_envs, body) = self.parse_stub_or_body()?;
         let (_, end) = self.last_span();
         Ok(Node::new(
             Item::Function(Function {
@@ -117,6 +118,7 @@ impl<'a> Parser<'a> {
                 is_async: false,
                 doc_comment: None,
                 bc_reason,
+                stub_envs,
             }),
             crate::error::SourceSpan::new(start, end - start),
         ))
@@ -130,7 +132,7 @@ impl<'a> Parser<'a> {
         let params = self.parse_params()?;
         self.expect(&Token::RParen)?;
         let return_type = self.parse_return_type()?;
-        let body = self.parse_block()?;
+        let (stub_envs, body) = self.parse_stub_or_body()?;
         let (_, end) = self.last_span();
         Ok(Node::new(
             Item::Function(Function {
@@ -141,9 +143,45 @@ impl<'a> Parser<'a> {
                 is_async: true,
                 doc_comment: None,
                 bc_reason: None,
+                stub_envs,
             }),
             crate::error::SourceSpan::new(start, end - start),
         ))
+    }
+
+    /// Parse `stub` or `stub: [env1, env2]` which replaces the function body.
+    /// If no `stub`, parse a normal block body.
+    /// Returns (stub_envs, body) where body is empty if stub.
+    fn parse_stub_or_body(&mut self) -> Result<(Option<Vec<String>>, Block)> {
+        if self.peek_is(&Token::Stub) {
+            self.advance(); // "stub"
+            let envs = if self.peek_is(&Token::Colon) {
+                self.advance(); // ":"
+                self.expect(&Token::LBracket)?; // "["
+                let mut envs = Vec::new();
+                if !self.peek_is(&Token::RBracket) {
+                    let first = self.expect_identifier()?;
+                    envs.push(first);
+                    while self.peek_is(&Token::Comma) {
+                        self.advance(); // ","
+                        if self.peek_is(&Token::RBracket) {
+                            break;
+                        }
+                        let env = self.expect_identifier()?;
+                        envs.push(env);
+                    }
+                }
+                self.expect(&Token::RBracket)?; // "]"
+                Some(envs)
+            } else {
+                // stub without env spec = matches all environments
+                Some(vec![])
+            };
+            Ok((envs, Block { statements: vec![] }))
+        } else {
+            let body = self.parse_block()?;
+            Ok((None, body))
+        }
     }
 
     fn parse_params(&mut self) -> Result<Vec<Param>> {
@@ -1430,6 +1468,7 @@ impl<'a> Parser<'a> {
             (Token::KwQuestion, Token::KwQuestion) => true,
             (Token::Bench, Token::Bench) => true,
             (Token::Bm, Token::Bm) => true,
+            (Token::Stub, Token::Stub) => true,
             (Token::Assign, Token::Assign) => true,
             (Token::Plus, Token::Plus) => true,
             (Token::Minus, Token::Minus) => true,
@@ -1548,6 +1587,7 @@ impl<'a> Parser<'a> {
             | (Token::Expect, Token::Expect)
             | (Token::Todo, Token::Todo) | (Token::KwQuestion, Token::KwQuestion)
             | (Token::Bench, Token::Bench) | (Token::Bm, Token::Bm)
+            | (Token::Stub, Token::Stub)
             | (Token::Assign, Token::Assign) | (Token::Plus, Token::Plus)
             | (Token::Minus, Token::Minus) | (Token::Star, Token::Star)
             | (Token::Slash, Token::Slash) | (Token::Percent, Token::Percent)
@@ -1850,5 +1890,58 @@ mod tests {
         let mut p = Parser::new("expect");
         let result = p.parse_stmt();
         assert!(result.is_err());
+    }
+
+    // ----- Stub -----
+
+    #[test]
+    fn test_parse_stub_bare() {
+        let prog = parse("func foo(x: Int) -> Int stub");
+        let f = match &prog.items[0].value {
+            Item::Function(f) => f,
+            _ => panic!("expected Function"),
+        };
+        assert_eq!(f.name, "foo");
+        assert!(f.stub_envs.is_some());
+        assert!(f.stub_envs.as_ref().unwrap().is_empty());
+        assert!(f.body.statements.is_empty());
+    }
+
+    #[test]
+    fn test_parse_stub_with_envs() {
+        let prog = parse("func foo(x: Int) -> Int stub: [local, dev]");
+        let f = match &prog.items[0].value {
+            Item::Function(f) => f,
+            _ => panic!("expected Function"),
+        };
+        assert_eq!(f.name, "foo");
+        assert!(f.stub_envs.is_some());
+        assert_eq!(f.stub_envs.as_ref().unwrap(), &vec!["local".to_string(), "dev".to_string()]);
+        assert!(f.body.statements.is_empty());
+    }
+
+    #[test]
+    fn test_parse_stub_single_env() {
+        let prog = parse("func foo() stub: [test]");
+        let f = match &prog.items[0].value {
+            Item::Function(f) => f,
+            _ => panic!("expected Function"),
+        };
+        assert_eq!(f.name, "foo");
+        assert!(f.stub_envs.is_some());
+        assert_eq!(f.stub_envs.as_ref().unwrap(), &vec!["test".to_string()]);
+    }
+
+    #[test]
+    fn test_parse_async_stub() {
+        let prog = parse("async func foo() -> String stub: [prod]");
+        let f = match &prog.items[0].value {
+            Item::Function(f) => f,
+            _ => panic!("expected Function"),
+        };
+        assert_eq!(f.name, "foo");
+        assert!(f.is_async);
+        assert!(f.stub_envs.is_some());
+        assert_eq!(f.stub_envs.as_ref().unwrap(), &vec!["prod".to_string()]);
     }
 }

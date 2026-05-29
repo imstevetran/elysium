@@ -13,6 +13,9 @@ pub struct Manifest {
     pub repository: Option<String>,
     #[serde(default)]
     pub dependencies: HashMap<String, String>,
+    /// Custom environment aliases (e.g. "staging" -> "dev", "production" -> "prod")
+    #[serde(default)]
+    pub environments: HashMap<String, String>,
 }
 
 impl Manifest {
@@ -27,6 +30,7 @@ impl Manifest {
             author: None,
             repository: None,
             dependencies: HashMap::new(),
+            environments: HashMap::new(),
         }
     }
 

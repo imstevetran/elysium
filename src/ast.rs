@@ -40,6 +40,7 @@ pub struct Function {
     pub is_async: bool,
     pub doc_comment: Option<String>,
     pub bc_reason: Option<String>,
+    pub stub_envs: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone)]

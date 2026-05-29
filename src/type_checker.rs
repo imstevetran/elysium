@@ -100,6 +100,10 @@ impl TypeChecker {
         // Second pass: check bodies
         for item in &program.items {
             if let Item::Function(f) = &item.value {
+                // Skip stub functions — no body to type-check
+                if f.stub_envs.is_some() {
+                    continue;
+                }
                 self.scopes.push(HashMap::new());
                 for param in &f.params {
                     let ty = param

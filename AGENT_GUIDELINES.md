@@ -79,3 +79,18 @@ The `question` keyword was chosen over `oq` or `concern` because it's the most i
   - Bare `"1.0.0"` → `^1.0.0` (compatible with same major)
   - Explicit constraints like `">=1.0.0 <2.0.0"` are parsed directly
   - `"*"` or empty → any version
+
+### Stub Functions & Environment Filtering
+- `func foo() -> Int stub` — declares a stub function (no body) available in all environments
+- `func foo() -> Int stub: [local, dev]` — declares a stub restricted to specific environments
+- Supported built-in envs: `local` (default), `dev`, `test`, `prod`
+- Custom aliases can be defined in `elysium.json` under the `environments` field (e.g. `"staging": "dev"`)
+- CLI flags: `--env` on `build`, `run`, `check` (default: `local`)
+- The compiler pipeline:
+  1. Parsed `stub` keyword produces `stub_envs: Option<Vec<String>>` on `Function` AST node
+  2. Bare `stub` (no env list) → `Some(vec![])` (matches all environments)
+  3. `stub: [local, test]` → `Some(vec!["local", "test"])`
+  4. Before type-checking/codegen, `filter_stubs()` removes functions whose env list doesn't match `--env`
+  5. Type checker, ownership checker, and linter skip body-walking for stub functions
+  6. Stub functions have empty `body: Block { statements: [] }` (no code generated)
+  7. HIR/MIR lowering and codegen handle empty bodies naturally — just emit a function with a default return
