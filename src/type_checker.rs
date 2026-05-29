@@ -251,6 +251,53 @@ impl TypeChecker {
                 );
             }
         }
+        // regex.* builtins (desugared from regex.test/match/search/replace/split)
+        {
+            // (String, String) → Bool
+            let bool_sigs: &[(&str, Vec<Type>)] = &[
+                ("__regex_test", vec![Type::String, Type::String]),
+            ];
+            for (name, param_types) in bool_sigs {
+                self.functions.insert(
+                    name.to_string(),
+                    FunctionSignature {
+                        param_types: param_types.clone(),
+                        return_type: Box::new(Type::Bool),
+                        is_async: false,
+                    },
+                );
+            }
+            // (String, String) → Int
+            let int_sigs: &[(&str, Vec<Type>)] = &[
+                ("__regex_search", vec![Type::String, Type::String]),
+            ];
+            for (name, param_types) in int_sigs {
+                self.functions.insert(
+                    name.to_string(),
+                    FunctionSignature {
+                        param_types: param_types.clone(),
+                        return_type: Box::new(Type::Int),
+                        is_async: false,
+                    },
+                );
+            }
+            // (String, String) → String or (String, String, String) → String
+            let string_sigs: &[(&str, Vec<Type>)] = &[
+                ("__regex_match", vec![Type::String, Type::String]),
+                ("__regex_replace", vec![Type::String, Type::String, Type::String]),
+                ("__regex_split", vec![Type::String, Type::String]),
+            ];
+            for (name, param_types) in string_sigs {
+                self.functions.insert(
+                    name.to_string(),
+                    FunctionSignature {
+                        param_types: param_types.clone(),
+                        return_type: Box::new(Type::String),
+                        is_async: false,
+                    },
+                );
+            }
+        }
         self.functions.insert(
             "sum".into(),
             FunctionSignature {

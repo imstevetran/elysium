@@ -125,6 +125,7 @@ impl Codegen {
             MirStmt::FsCall { dbg_line, .. } => *dbg_line,
             MirStmt::TransportCall { dbg_line, .. } => *dbg_line,
             MirStmt::StringCall { dbg_line, .. } => *dbg_line,
+            MirStmt::RegexCall { dbg_line, .. } => *dbg_line,
             _ => func.dbg_line,
         };
 
@@ -160,6 +161,9 @@ impl Codegen {
             }
             MirStmt::StringCall { result, method, args, dbg_line: _ } => {
                 self.emit_string_call(result, method, args, builder)?;
+            }
+            MirStmt::RegexCall { result, method, args, dbg_line: _ } => {
+                self.emit_regex_call(result, method, args, builder)?;
             }
             _ => {}
         }
@@ -667,6 +671,26 @@ impl Codegen {
                     .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
             }
         }
+        Ok(())
+    }
+
+    /// Emit a regex call.
+    /// Regex operations don't map to C stdlib — emit a runtime stub.
+    fn emit_regex_call(
+        &self,
+        _result: &Option<String>,
+        method: &str,
+        _args: &[MirValue],
+        builder: &inkwell::builder::Builder<'static>,
+    ) -> Result<()> {
+        let i32_ty = self.context.i32_type();
+        let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::default());
+        let printf_ty = i32_ty.fn_type(&[ptr_ty.into()], true);
+        let printf_fn = self.module.add_function("printf", printf_ty, None);
+        let msg = format!("[regex] {}: use JS runtime\n", method);
+        let fmt = builder.build_global_string_ptr(&msg, "__regex_fmt").expect("fmt");
+        let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__regex_printf")
+            .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
         Ok(())
     }
 }

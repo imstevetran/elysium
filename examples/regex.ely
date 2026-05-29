@@ -1,0 +1,12 @@
+// Test regex operations via the regex package
+// Uses regex.test, match, search, replace, split
+
+func main() {
+    regex.test("\\d+", "hello 123 world")
+    regex.match("\\d+", "abc 456 def")
+    regex.search("\\d+", "abc 789 def")
+    regex.replace("foo", "hello foo world", "bar")
+    regex.split(",", "a,b,c")
+
+    print("regex operations completed\n")
+}

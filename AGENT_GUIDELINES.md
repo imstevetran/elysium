@@ -180,3 +180,17 @@ The `question` keyword was chosen over `oq` or `concern` because it's the most i
   - All other methods: prints stub `[string] method: use JS runtime\n`
 - JS runtime `npm-package/runtime/string.js` maps every method to native JavaScript `String.prototype`
 - Exported via `require('elysium-lang').string`
+
+### Regex Package (added May 2026)
+- Regular expression utilities via `regex.` namespace
+- Desugaring in `main.rs` converts `regex.method(...)` → `__regex_method(...)`
+- Type checker registers `__regex_*` builtins:
+  - `test(pattern: String, str: String) → Bool`
+  - `match(pattern: String, str: String) → String`
+  - `search(pattern: String, str: String) → Int`
+  - `replace(pattern: String, str: String, replacement: String) → String`
+  - `split(pattern: String, str: String) → String`
+- MIR: Uses `MirStmt::RegexCall { result, method, args, dbg_line }`
+- Codegen (`emit_regex_call`): prints `[regex] method: use JS runtime\n` — regex is JS-runtime-only
+- JS runtime `npm-package/runtime/regex.js` wraps native JavaScript `RegExp` with try/catch safety
+- Exported via `require('elysium-lang').regex`

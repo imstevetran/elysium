@@ -627,6 +627,7 @@ fn desugar_builtin_in_expr(expr: &mut ast::Expr) {
                     "fs" => "__fs_",
                     "transport" => "__transport_",
                     "string" => "__string_",
+                    "regex" => "__regex_",
                     _ => "",
                 };
                 if !prefix.is_empty() {

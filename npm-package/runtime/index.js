@@ -18,6 +18,7 @@ const consoleMod = require('./console');
 const fsMod = require('./fs');
 const transportMod = require('./transport');
 const stringMod = require('./string');
+const regexMod = require('./regex');
 
 module.exports = {
   // ARC
@@ -51,4 +52,7 @@ module.exports = {
 
   // String utilities
   string: stringMod,
+
+  // Regex utilities
+  regex: regexMod,
 };
