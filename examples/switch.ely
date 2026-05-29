@@ -1,0 +1,42 @@
+// switch/case/then/else — human & LLM friendly branching
+// Desugars into match/case internally — no pipeline changes needed.
+
+func describe_score(score: Int) -> String {
+    return switch score {
+        case 100 then { "Perfect!" }
+        case 90 then { "Excellent!" }
+        case 80 then { "Great!" }
+        case 70 then { "Good" }
+        case 60 then { "Passing" }
+        else { "Needs improvement" }
+    }
+}
+
+func main() {
+    let s1 = describe_score(100)
+    println(s1)
+
+    // switch as a statement
+    let x = 3
+    switch x {
+        case 1 then { println("one") }
+        case 2 then { println("two") }
+        case 3 then { println("three") }
+        else { println("many") }
+    }
+
+    // with _ wildcard
+    let y = 42
+    switch y {
+        case 0 then { println("zero") }
+        case _ then { println("non-zero") }
+    }
+
+    // string patterns
+    let name = "bob"
+    switch name {
+        case "alice" then { println("hi alice") }
+        case "bob" then { println("hi bob") }
+        else { println("hi stranger") }
+    }
+}

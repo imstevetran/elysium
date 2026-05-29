@@ -57,7 +57,7 @@ fn token_kind(tok: &Token) -> Option<SpanKind> {
         | Token::Todo | Token::KwQuestion
         | Token::Bench | Token::Bm
         | Token::Stub
-        | Token::Private | Token::Lazy
+        | Token::Private | Token::Lazy | Token::Switch
         | Token::True | Token::False | Token::Nil => Some(SpanKind::Keyword),
 
         // String literals

@@ -110,3 +110,11 @@ The `question` keyword was chosen over `oq` or `concern` because it's the most i
   5. Type checker, ownership checker, and linter skip body-walking for stub functions
   6. Stub functions have empty `body: Block { statements: [] }` (no code generated)
   7. HIR/MIR lowering and codegen handle empty bodies naturally — just emit a function with a default return
+
+### Switch/Case/Then/Else (added May 2026)
+- `switch` is a user-friendly alias for `match` — desugars directly into the existing `Match`/`MatchExpression` AST nodes, so the entire pipeline (HIR, MIR, codegen) works unchanged.
+- Syntax: `switch expr { case pattern then { body } else { body } }`
+  - Uses `then` keyword (already exists in language) instead of `->` arrow
+  - `else` block becomes a `Wildcard` pattern arm
+  - Supports both statement and expression forms
+- `parse_pattern` supports: `_` (wildcard as `Pattern::Wildcard`), integers, floats, bools, nil, strings, identifiers (bindings), enum variants, `only Type`

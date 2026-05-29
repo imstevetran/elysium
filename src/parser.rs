@@ -716,6 +716,8 @@ impl<'a> Parser<'a> {
             self.parse_return_stmt()
         } else if self.peek_is(&Token::Match) {
             self.parse_match_stmt()
+        } else if self.peek_is(&Token::Switch) {
+            self.parse_switch_stmt()
         } else if self.peek_is(&Token::Try) {
             self.parse_try_catch_stmt()
         } else if self.peek_is(&Token::Bc) || self.peek_is(&Token::Because) {
@@ -955,14 +957,75 @@ impl<'a> Parser<'a> {
         ))
     }
 
+    /// Parse `switch expr { case val then { ... } case val then { ... } else { ... } }`
+    /// Desugars directly into the existing `Match` AST node (identical semantics, friendlier syntax).
+    fn parse_switch_stmt(&mut self) -> Result<Node<Stmt>> {
+        let start = self.advance_span_start(); // "switch"
+        let value = self.parse_expr()?;
+        self.expect(&Token::LBrace)?;
+        let mut arms = Vec::new();
+        let mut else_block: Option<Block> = None;
+        while !self.peek_is(&Token::RBrace) && self.pos < self.tokens.len() {
+            if self.peek_is(&Token::Else) {
+                self.advance(); // "else"
+                else_block = Some(self.parse_block()?);
+                break; // else must be the last arm
+            }
+            self.expect(&Token::Case)?;
+            let pattern = self.parse_pattern()?;
+            self.expect(&Token::Then)?;
+            let body = self.parse_block()?;
+            arms.push(MatchArm { pattern, body });
+        }
+        self.expect(&Token::RBrace)?;
+        // If there's an else block, add it as a wildcard arm
+        if let Some(block) = else_block {
+            arms.push(MatchArm {
+                pattern: Pattern::Wildcard,
+                body: block,
+            });
+        }
+        let (_, end) = self.last_span();
+        Ok(Node::new(
+            Stmt::Match(Box::new(Node::new(
+                Match {
+                    value: Box::new(Node::new(value, crate::error::SourceSpan::new(start, end - start))),
+                    arms,
+                },
+                crate::error::SourceSpan::new(start, end - start),
+            ))),
+            crate::error::SourceSpan::new(start, end - start),
+        ))
+    }
+
     fn parse_pattern(&mut self) -> Result<Pattern> {
         if self.peek_is(&Token::Only) {
             self.advance(); // "only"
             let name = self.expect_identifier()?;
             Ok(Pattern::OnlyType(name))
+        } else if self.is_int_lit() {
+            let (_, val) = self.expect_int()?;
+            Ok(Pattern::Literal(Literal::Int(val)))
+        } else if self.is_float_lit() {
+            let (_, val) = self.expect_float()?;
+            Ok(Pattern::Literal(Literal::Float(val)))
+        } else if self.peek_is(&Token::True) {
+            self.advance();
+            Ok(Pattern::Literal(Literal::Bool(true)))
+        } else if self.peek_is(&Token::False) {
+            self.advance();
+            Ok(Pattern::Literal(Literal::Bool(false)))
+        } else if self.peek_is(&Token::Nil) {
+            self.advance();
+            Ok(Pattern::Literal(Literal::Nil))
+        } else if self.is_string_lit() {
+            let (_, val) = self.expect_string()?;
+            Ok(Pattern::Literal(Literal::String(val)))
         } else if self.is_identifier() {
             let name = self.expect_identifier()?;
-            if self.peek_is(&Token::LParen) {
+            if name == "_" {
+                Ok(Pattern::Wildcard)
+            } else if self.peek_is(&Token::LParen) {
                 self.advance(); // "("
                 let mut bindings = Vec::new();
                 if !self.peek_is(&Token::RParen) {
@@ -1534,9 +1597,43 @@ impl<'a> Parser<'a> {
             Ok(Expr::Array(items))
         } else if self.peek_is(&Token::LBrace) {
             self.parse_block_expr()
+        } else if self.peek_is(&Token::Switch) {
+            self.parse_switch_expr()
         } else {
             Err(self.error("expected expression"))
         }
+    }
+
+    /// Parse `switch expr { case val then { ... } else { ... } }` as an expression.
+    fn parse_switch_expr(&mut self) -> Result<Expr> {
+        self.advance(); // "switch"
+        let value = self.parse_expr()?;
+        self.expect(&Token::LBrace)?;
+        let mut arms = Vec::new();
+        let mut else_arm: Option<Block> = None;
+        while !self.peek_is(&Token::RBrace) && self.pos < self.tokens.len() {
+            if self.peek_is(&Token::Else) {
+                self.advance(); // "else"
+                else_arm = Some(self.parse_block()?);
+                break;
+            }
+            self.expect(&Token::Case)?;
+            let pattern = self.parse_pattern()?;
+            self.expect(&Token::Then)?;
+            let body = self.parse_block()?;
+            arms.push(MatchArm { pattern, body });
+        }
+        self.expect(&Token::RBrace)?;
+        if let Some(block) = else_arm {
+            arms.push(MatchArm {
+                pattern: Pattern::Wildcard,
+                body: block,
+            });
+        }
+        Ok(Expr::MatchExpression {
+            value: Box::new(Node::new(value, crate::error::SourceSpan::new(0, 0))),
+            arms,
+        })
     }
 
     fn parse_block_expr(&mut self) -> Result<Expr> {
@@ -1612,6 +1709,7 @@ impl<'a> Parser<'a> {
             (Token::Stub, Token::Stub) => true,
             (Token::Private, Token::Private) => true,
             (Token::Lazy, Token::Lazy) => true,
+            (Token::Switch, Token::Switch) => true,
             (Token::Assign, Token::Assign) => true,
             (Token::Plus, Token::Plus) => true,
             (Token::Minus, Token::Minus) => true,
@@ -1731,7 +1829,7 @@ impl<'a> Parser<'a> {
             | (Token::Todo, Token::Todo) | (Token::KwQuestion, Token::KwQuestion)
             | (Token::Bench, Token::Bench) | (Token::Bm, Token::Bm)
             | (Token::Stub, Token::Stub)
-            | (Token::Private, Token::Private) | (Token::Lazy, Token::Lazy)
+            | (Token::Private, Token::Private) | (Token::Lazy, Token::Lazy) | (Token::Switch, Token::Switch)
             | (Token::Assign, Token::Assign) | (Token::Plus, Token::Plus)
             | (Token::Minus, Token::Minus) | (Token::Star, Token::Star)
             | (Token::Slash, Token::Slash) | (Token::Percent, Token::Percent)
@@ -2176,5 +2274,58 @@ mod tests {
         assert_eq!(cls.methods[1].name, "baz");
         assert!(cls.methods[1].is_private);
         assert_eq!(cls.methods[2].name, "init");
+    }
+
+    #[test]
+    fn test_parse_switch_stmt() {
+        let stmt = parse_stmt("switch x {
+            case 1 then { println(\"one\") }
+            case 2 then { println(\"two\") }
+            else { println(\"other\") }
+        }");
+        match &stmt {
+            Stmt::Match(m) => {
+                assert_eq!(m.value.arms.len(), 3);
+                assert!(matches!(m.value.arms[2].pattern, Pattern::Wildcard));
+            }
+            _ => panic!("expected Match"),
+        }
+    }
+
+    #[test]
+    fn test_parse_switch_expr() {
+        // switch expression used as a value in a let
+        let stmt = parse_stmt("let result = switch x {
+            case 1 then { 10 }
+            case 2 then { 20 }
+            else { 0 }
+        }");
+        match &stmt {
+            Stmt::Let(l) => {
+                let val = l.value.value.as_ref().expect("expected some value");
+                match val {
+                    Expr::MatchExpression { arms, .. } => {
+                        assert_eq!(arms.len(), 3);
+                        assert!(matches!(arms[2].pattern, Pattern::Wildcard));
+                    }
+                    _ => panic!("expected MatchExpression"),
+                }
+            }
+            _ => panic!("expected Let"),
+        }
+    }
+
+    #[test]
+    fn test_parse_switch_no_else() {
+        let stmt = parse_stmt("switch x {
+            case 1 then { println(\"one\") }
+            case 2 then { println(\"two\") }
+        }");
+        match &stmt {
+            Stmt::Match(m) => {
+                assert_eq!(m.value.arms.len(), 2);
+            }
+            _ => panic!("expected Match"),
+        }
     }
 }

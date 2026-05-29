@@ -97,6 +97,8 @@ pub enum Token {
     Bm,
     #[token("stub")]
     Stub,
+    #[token("switch")]
+    Switch,
     #[token("private")]
     Private,
     #[token("lazy")]
