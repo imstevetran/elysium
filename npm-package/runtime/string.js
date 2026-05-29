@@ -43,6 +43,27 @@ function repeat(s, count) { return typeof s === 'string' ? s.repeat(count) : '';
 function split(s, separator) { return typeof s === 'string' ? s.split(separator) : []; }
 function match(s, pattern) { return typeof s === 'string' ? s.match(pattern) : null; }
 
+// () → String — generate a UUID v4
+function uuid() {
+  // Modern browsers and Node 19+ have crypto.randomUUID
+  if (typeof globalThis !== 'undefined' && globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function') {
+    return globalThis.crypto.randomUUID();
+  }
+  // Node 15+ has crypto.randomUUID via require
+  try {
+    const nodeCrypto = require('crypto');
+    if (typeof nodeCrypto.randomUUID === 'function') {
+      return nodeCrypto.randomUUID();
+    }
+  } catch (_) {}
+  // Fallback: manual v4 UUID generation
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+
 module.exports = {
   length,
   charCodeAt,

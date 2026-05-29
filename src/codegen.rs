@@ -666,6 +666,49 @@ impl Codegen {
                     }
                 }
             }
+            "uuid" => {
+                let i32_ty = self.context.i32_type();
+                let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::default());
+
+                let popen_ty = ptr_ty.fn_type(&[ptr_ty.into(), ptr_ty.into()], false);
+                let popen_fn = self.module.add_function("popen", popen_ty, None);
+                let fgets_ty = ptr_ty.fn_type(&[ptr_ty.into(), i32_ty.into(), ptr_ty.into()], false);
+                let fgets_fn = self.module.add_function("fgets", fgets_ty, None);
+                let pclose_ty = i32_ty.fn_type(&[ptr_ty.into()], false);
+                let pclose_fn = self.module.add_function("pclose", pclose_ty, None);
+                let printf_ty = i32_ty.fn_type(&[ptr_ty.into()], true);
+                let printf_fn = self.module.add_function("printf", printf_ty, None);
+
+                let cmd_uuidgen = builder.build_global_string_ptr("uuidgen", "__uuid_cmd").expect("cmd");
+                let mode_r = builder.build_global_string_ptr("r", "__uuid_mode").expect("mode");
+                let fp = builder.build_call(popen_fn, &[cmd_uuidgen.as_pointer_value().into(), mode_r.as_pointer_value().into()], "__uuid_fp")
+                    .map_err(|e| crate::error::CompileError::new(format!("popen: {}", e)))?
+                    .as_any_value_enum()
+                    .into_pointer_value();
+
+                let buf = builder.build_alloca(self.context.i8_type().array_type(64), "__uuid_buf").expect("buf");
+                let zero = i32_ty.const_zero();
+                let buf_ptr = unsafe {
+                    builder.build_in_bounds_gep(self.context.i8_type().array_type(64), buf, &[zero, zero], "__uuid_buf_ptr")
+                }.map_err(|e| crate::error::CompileError::new(format!("gep: {}", e)))?;
+
+                let _ = builder.build_call(fgets_fn, &[buf_ptr.into(), i32_ty.const_int(64, false).into(), fp.into()], "__uuid_fgets")
+                    .map_err(|e| crate::error::CompileError::new(format!("fgets: {}", e)))?;
+                let _ = builder.build_call(pclose_fn, &[fp.into()], "__uuid_pclose")
+                    .map_err(|e| crate::error::CompileError::new(format!("pclose: {}", e)))?;
+
+                let fmt_uuid = builder.build_global_string_ptr("uuid: %s\n", "__uuid_print_fmt").expect("fmt");
+                let _ = builder.build_call(printf_fn, &[fmt_uuid.as_pointer_value().into(), buf_ptr.into()], "__uuid_print")
+                    .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+
+                // Store result pointer if needed
+                if let Some(dest) = result {
+                    let dest_alloca = builder.build_alloca(ptr_ty, &format!("__str_result_{}", dest))
+                        .expect("uuid result alloca");
+                    builder.build_store(dest_alloca, buf_ptr)
+                        .map_err(|e| crate::error::CompileError::new(format!("store uuid: {}", e)))?;
+                }
+            }
             _ => {
                 let printf_ty = i32_ty.fn_type(&[ptr_ty.into()], true);
                 let printf_fn = self.module.add_function("printf", printf_ty, None);

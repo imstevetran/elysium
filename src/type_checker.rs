@@ -250,6 +250,15 @@ impl TypeChecker {
                     },
                 );
             }
+            // () → String
+            self.functions.insert(
+                "__string_uuid".to_string(),
+                FunctionSignature {
+                    param_types: vec![],
+                    return_type: Box::new(Type::String),
+                    is_async: false,
+                },
+            );
         }
         // regex.* builtins (desugared from regex.test/match/search/replace/split)
         {
