@@ -1,6 +1,7 @@
 mod cli;
 mod manifest;
 mod registry;
+mod tree_shake;
 
 use clap::Parser;
 use std::path::PathBuf;
@@ -12,8 +13,8 @@ fn main() {
         cli::Commands::Init { name, version, description, author, license, force } => {
             cmd_init(name, version, description, author, license, *force)
         }
-        cli::Commands::Install { package, version, save } => {
-            cmd_install(package.as_deref(), version.as_deref(), *save)
+        cli::Commands::Install { package, version, save, shake } => {
+            cmd_install(package.as_deref(), version.as_deref(), *save, *shake)
         }
         cli::Commands::Publish { registry: _ } => {
             cmd_publish()
@@ -23,6 +24,12 @@ fn main() {
         }
         cli::Commands::Info { package } => {
             cmd_info(package)
+        }
+        cli::Commands::Tree { all } => {
+            cmd_tree(*all)
+        }
+        cli::Commands::Shake { dry_run } => {
+            cmd_shake(*dry_run)
         }
         cli::Commands::Login { token } => {
             cmd_login(token)
@@ -86,12 +93,13 @@ fn cmd_install(
     package: Option<&str>,
     version: Option<&str>,
     save: bool,
+    shake: bool,
 ) -> Result<(), String> {
     match package {
         None => {
             // Install all dependencies from elysium.json
             let cwd = std::env::current_dir().map_err(|e| format!("Cannot get current dir: {}", e))?;
-            let mut manifest = manifest::Manifest::load_from_dir(&cwd)?;
+            let manifest = manifest::Manifest::load_from_dir(&cwd)?;
 
             if manifest.dependencies.is_empty() {
                 println!("No dependencies to install.");
@@ -112,6 +120,13 @@ fn cmd_install(
             }
 
             println!("All dependencies installed.");
+
+            if shake {
+                println!("\nTree-shaking installed packages...");
+                let report = tree_shake::shake_packages(&deps_dir, false)?;
+                println!("  Removed {} unused file(s).", report.removed_files);
+            }
+
             Ok(())
         }
         Some(pkg) => {
@@ -134,6 +149,12 @@ fn cmd_install(
                 manifest.dependencies.insert(pkg.to_string(), ver.unwrap_or("*").to_string());
                 manifest.save_to_dir(&cwd)?;
                 println!("  -> saved to elysium.json");
+            }
+
+            if shake {
+                println!("\nTree-shaking installed packages...");
+                let report = tree_shake::shake_packages(&deps_dir, false)?;
+                println!("  Removed {} unused file(s).", report.removed_files);
             }
 
             Ok(())
@@ -199,12 +220,6 @@ fn cmd_publish() -> Result<(), String> {
     std::fs::create_dir_all(&token_dir).map_err(|e| format!("Cannot create cache dir: {}", e))?;
 
     // Temporarily set GIT_ASKPASS to a script that returns the token
-    // Actually, let's just use the token inline in the URL for the push
-    // We need to set remote origin to include token
-    let registry_url = format!("https://{}@github.com/imstevetran/epm-registry.git", token);
-
-    // But registry's remote is already set. We need to temporarily update it.
-    // This is tricky — let's use a simpler approach: set GIT_ASKPASS
     std::env::set_var("EPM_GIT_TOKEN", &token);
 
     // Write a temporary askpass script that outputs the token
@@ -257,6 +272,63 @@ fn cmd_info(package: &str) -> Result<(), String> {
     println!("Versions:");
     for v in &entry.versions {
         println!("  - {}", v);
+    }
+
+    Ok(())
+}
+
+fn cmd_tree(_all: bool) -> Result<(), String> {
+    let cwd = std::env::current_dir().map_err(|e| format!("Cannot get current dir: {}", e))?;
+    let manifest = manifest::Manifest::load_from_dir(&cwd)?;
+    let deps_dir = cwd.join("elysium_modules");
+
+    if !deps_dir.exists() {
+        println!("No dependencies installed. Run `epm install` first.");
+        return Ok(());
+    }
+
+    let tree = tree_shake::build_dep_tree(&manifest, &deps_dir);
+    println!("Dependency tree for {}@{}:", manifest.name, manifest.version);
+    for child in &tree.children {
+        tree_shake::print_tree(child, 0);
+    }
+
+    if tree.children.is_empty() {
+        println!("(no dependencies)");
+    }
+    Ok(())
+}
+
+fn cmd_shake(dry_run: bool) -> Result<(), String> {
+    let cwd = std::env::current_dir().map_err(|e| format!("Cannot get current dir: {}", e))?;
+    let deps_dir = cwd.join("elysium_modules");
+
+    if !deps_dir.exists() {
+        println!("No dependencies installed. Run `epm install` first.");
+        return Ok(());
+    }
+
+    if dry_run {
+        println!("Dry run — no files will be deleted.\n");
+    }
+
+    let report = tree_shake::shake_packages(&deps_dir, dry_run)?;
+
+    println!("Tree-shaking report:");
+    println!("  Scanned: {} file(s)", report.scanned_files);
+    println!("  Kept:    {} file(s)", report.kept_files);
+    println!("  Removed: {} file(s)", report.removed_files);
+
+    if !report.files_removed.is_empty() {
+        println!("\nFiles:");
+        for f in &report.files_removed {
+            let display = f.strip_prefix(&deps_dir).unwrap_or(f);
+            println!("  - {}", display.display());
+        }
+    }
+
+    if dry_run && report.removed_files > 0 {
+        println!("\nRun `epm shake` (without --dry-run) to actually remove these files.");
     }
 
     Ok(())

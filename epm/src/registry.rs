@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use crate::manifest::{Manifest, RegistryEntry};
-use tempfile::TempDir;
 
 const REGISTRY_URL: &str = "https://github.com/imstevetran/epm-registry.git";
 const REGISTRY_DIR_NAME: &str = ".epm-registry";
@@ -75,7 +74,7 @@ fn write_and_push_registry(index: &HashMap<String, RegistryEntry>, registry_dir:
         return Err("git add failed".to_string());
     }
 
-    let git_commit = std::process::Command::new("git")
+    let _git_commit = std::process::Command::new("git")
         .args(["-C", registry_dir.to_str().unwrap(), "commit", "--allow-empty", "-m", "Update registry from epm"])
         .status()
         .map_err(|e| format!("git commit: {}", e))?;

@@ -1,5 +1,4 @@
 use clap::{Parser, Subcommand};
-use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(name = "epm", version = "0.1.0", about = "Elysium Package Manager")]
@@ -41,6 +40,9 @@ pub enum Commands {
         /// Save as a dependency in elysium.json
         #[arg(long)]
         save: bool,
+        /// Tree-shake installed packages after installation
+        #[arg(long)]
+        shake: bool,
     },
 
     /// Publish the current package to the registry
@@ -58,6 +60,20 @@ pub enum Commands {
     /// Show info about a package
     Info {
         package: String,
+    },
+
+    /// Show the dependency tree of installed packages
+    Tree {
+        /// Show dev dependencies too (not just regular deps)
+        #[arg(long)]
+        all: bool,
+    },
+
+    /// Tree-shake installed packages: remove unused .ely files
+    Shake {
+        /// Don't actually delete, only list what would be removed
+        #[arg(long)]
+        dry_run: bool,
     },
 
     /// Log in to the registry (stores GitHub token)
