@@ -63,7 +63,7 @@ impl TypeChecker {
             },
         );
         // console.* builtins (desugared from console.debug/warn/info/log/error)
-        // and bare print/println (desugared to __console_print/__console_println)
+        // and bare print (desugared to __console_print)
         for name in &[
             "__console_debug",
             "__console_info",
@@ -71,7 +71,6 @@ impl TypeChecker {
             "__console_error",
             "__console_log",
             "__console_print",
-            "__console_println",
         ] {
             self.functions.insert(
                 name.to_string(),
@@ -81,6 +80,57 @@ impl TypeChecker {
                     is_async: false,
                 },
             );
+        }
+        // fs.* builtins (desugared from fs.readFile/writeFile/exists/...)
+        {
+            let void_sigs: &[(&str, Vec<Type>)] = &[
+                ("__fs_writeFile", vec![Type::String, Type::String]),
+                ("__fs_appendFile", vec![Type::String, Type::String]),
+                ("__fs_removeFile", vec![Type::String]),
+                ("__fs_createDir", vec![Type::String]),
+                ("__fs_removeDir", vec![Type::String]),
+                ("__fs_copyFile", vec![Type::String, Type::String]),
+                ("__fs_rename", vec![Type::String, Type::String]),
+            ];
+            for (name, param_types) in void_sigs {
+                self.functions.insert(
+                    name.to_string(),
+                    FunctionSignature {
+                        param_types: param_types.clone(),
+                        return_type: Box::new(Type::Nil),
+                        is_async: false,
+                    },
+                );
+            }
+            let string_sigs: &[(&str, Vec<Type>)] = &[
+                ("__fs_readFile", vec![Type::String]),
+                ("__fs_readFileSync", vec![Type::String]),
+            ];
+            for (name, param_types) in string_sigs {
+                self.functions.insert(
+                    name.to_string(),
+                    FunctionSignature {
+                        param_types: param_types.clone(),
+                        return_type: Box::new(Type::String),
+                        is_async: false,
+                    },
+                );
+            }
+            let bool_sigs: &[(&str, Vec<Type>)] = &[
+                ("__fs_exists", vec![Type::String]),
+                ("__fs_isFile", vec![Type::String]),
+                ("__fs_isDir", vec![Type::String]),
+            ];
+            for (name, param_types) in bool_sigs {
+                self.functions.insert(
+                    name.to_string(),
+                    FunctionSignature {
+                        param_types: param_types.clone(),
+                        return_type: Box::new(Type::Bool),
+                        is_async: false,
+                    },
+                );
+            }
         }
         self.functions.insert(
             "sum".into(),

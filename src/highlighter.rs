@@ -35,7 +35,7 @@ fn is_type_name(name: &str) -> bool {
 }
 
 fn is_builtin_func(name: &str) -> bool {
-    matches!(name, "print" | "println" | "sum" | "min" | "max"
+    matches!(name, "print" | "sum" | "min" | "max"
         | "abs" | "len" | "count" | "isEmpty" | "map" | "filter" | "reduce")
 }
 

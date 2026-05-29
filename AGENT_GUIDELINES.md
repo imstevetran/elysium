@@ -121,10 +121,26 @@ The `question` keyword was chosen over `oq` or `concern` because it's the most i
 
 ### Unified Logging — Console (added May 2026)
 - `console.debug("msg")`, `console.info("msg")`, `console.warn("msg")`, `console.error("msg")`, `console.log("msg")` are supported syntax
-- Also `print(x)` and `println(x)` are supported
+- Also `print(x)` is supported
 - **Backend (compiled binary)**: `console.*` desugars to `__console_*` builtins → MIR `ConsoleCall` → LLVM `printf` with `[DEBUG]`, `[INFO]`, `[WARN]`, `[ERROR]` prefixes
 - **Client-side / Node**: `npm-package/runtime/console.js` maps to native `console.*` API with environment detection (browser vs Node vs fallback)
-- Desugaring happens in `main.rs` via `desugar_console_calls()` → `desugar_console_in_expr()` which converts `console.method(...)` → `__console_method(...)` and `print`/`println` → `__console_print`/`__console_println`
+- Desugaring happens in `main.rs` via `desugar_console_calls()` → `desugar_console_in_expr()` which converts `console.method(...)` → `__console_method(...)` and `print` → `__console_print`
 - Type checker has `__console_*` registered as `(Infer) → Nil` builtins
-- Codegen `emit_console_call()` builds a printf format string with the prefix, formats each arg as `%s`, and appends `\n` for println/debug/info/warn/error/log
+- Codegen `emit_console_call()` builds a printf format string with the prefix, formats each arg as `%s`, and appends `\n` for debug/info/warn/error/log (not for bare print)
 - JS runtime `console.js` exports `{ debug, info, warn, error, log }` — access via `require('elysium-lang/runtime/console')` or `require('elysium-lang').console`
+
+### Filesystem Package (added May 2026)
+- `fs.readFile("path")`, `fs.writeFile("path", "content")`, `fs.exists("path")`, `fs.removeFile("path")`,
+  `fs.createDir("path")`, `fs.removeDir("path")`, `fs.copyFile("src", "dst")`, `fs.rename("old", "new")`,
+  `fs.appendFile("path", "content")` are supported via method-call syntax on `fs.`
+- Desugaring in `main.rs` (`desugar_builtin_calls`) converts `fs.method(...)` → `__fs_method(...)`
+- Type checker registers `__fs_*` builtins with type-specific signatures:
+  - `__fs_readFile`, `__fs_readFileSync`: `(String) → String`
+  - `__fs_writeFile`, `__fs_appendFile`: `(String, String) → Nil`
+  - `__fs_exists`, `__fs_isFile`, `__fs_isDir`: `(String) → Bool`
+  - `__fs_removeFile`, `__fs_createDir`, `__fs_removeDir`: `(String) → Nil`
+  - `__fs_copyFile`, `__fs_rename`: `(String, String) → Nil`
+- MIR: Uses `MirStmt::FsCall { result: Option<String>, method, args, dbg_line }` for both void and return-value contexts
+- Codegen (`emit_fs_call`): calls C stdlib functions directly (`fopen`, `fgets`/`fputs`, `fclose`, `remove`, `access`, `mkdir`, `rmdir`, `rename`)
+- JS runtime `npm-package/runtime/fs.js` maps to Node's native `fs` module (readFileSync, writeFileSync, etc.)
+- Exported via `require('elysium-lang').fs`

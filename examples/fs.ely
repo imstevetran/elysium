@@ -1,0 +1,36 @@
+// Test filesystem operations via the fs package
+// Uses print() as console output since println was removed
+
+func main() {
+    // Write a file
+    fs.writeFile("test_output.txt", "Hello from Elysium fs!")
+
+    // Check if it exists
+    fs.exists("test_output.txt")
+
+    // Read it back
+    fs.readFile("test_output.txt")
+
+    // Append more content
+    fs.appendFile("test_output.txt", "\nSecond line")
+
+    // Create a directory
+    fs.createDir("test_dir")
+
+    // Copy the file
+    fs.copyFile("test_output.txt", "test_output_copy.txt")
+
+    // Rename
+    fs.rename("test_output_copy.txt", "test_output_renamed.txt")
+
+    // Remove the renamed copy
+    fs.removeFile("test_output_renamed.txt")
+
+    // Remove the original
+    fs.removeFile("test_output.txt")
+
+    // Remove the directory
+    fs.removeDir("test_dir")
+
+    print("fs operations completed\n")
+}

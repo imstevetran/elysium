@@ -436,7 +436,7 @@ fn compile_file(file: &PathBuf, output: Option<PathBuf>, emit_ir: bool, debug_en
         let program = filter_stubs_raw(program, env);
         (source, program)
     };
-    desugar_console_calls(&mut program);
+    desugar_builtin_calls(&mut program);
 
     compile_merged(&source, &program, &file_path, debug_enabled, emit_ir, output)
 }
@@ -454,7 +454,7 @@ fn compile_and_run(file: &PathBuf, debug_enabled: bool, emit_ir: bool, env: &str
         let program = filter_stubs_raw(program, env);
         (source, program)
     };
-    desugar_console_calls(&mut program);
+    desugar_builtin_calls(&mut program);
 
     compile_merged(&source, &program, &file_path, debug_enabled, emit_ir, Some(PathBuf::from("output.bc")))?;
     println!("Compiled successfully.");
@@ -472,7 +472,7 @@ fn check_file(file: &PathBuf, env: &str) -> error::Result<()> {
         let program = filter_stubs_raw(program, env);
         (source, program)
     };
-    desugar_console_calls(&mut program);
+    desugar_builtin_calls(&mut program);
 
     let mut type_checker = type_checker::TypeChecker::new();
     type_checker.check_program(&program)?;
@@ -515,118 +515,120 @@ fn filter_stubs(mut prog: ast::Program, aliases: &std::collections::HashSet<Stri
     filter_stubs_raw(prog, env)
 }
 
-/// Desugar `console.debug("msg")` → `__console_debug("msg")` etc.
-/// Also desugar `print(x)` → `__console_print(x)` and `println(x)` → `__console_println(x)`.
-fn desugar_console_calls(program: &mut ast::Program) {
+/// Desugar `console.debug("msg")` → `__console_debug("msg")` and
+/// `fs.readFile("path")` → `__fs_readFile("path")` etc.
+/// Also desugar `print(x)` → `__console_print(x)`.
+fn desugar_builtin_calls(program: &mut ast::Program) {
     for item in &mut program.items {
         if let ast::Item::Function(f) = &mut item.value {
-            desugar_console_in_block(&mut f.body);
+            desugar_builtin_in_block(&mut f.body);
         }
     }
 }
 
-fn desugar_console_in_block(block: &mut ast::Block) {
+fn desugar_builtin_in_block(block: &mut ast::Block) {
     for stmt in &mut block.statements {
-        desugar_console_in_stmt(stmt);
+        desugar_builtin_in_stmt(stmt);
     }
 }
 
-fn desugar_console_in_stmt(stmt: &mut ast::Node<ast::Stmt>) {
+fn desugar_builtin_in_stmt(stmt: &mut ast::Node<ast::Stmt>) {
     match &mut stmt.value {
         ast::Stmt::Let(boxed) => {
             if let Some(val) = &mut boxed.value.value {
-                desugar_console_in_expr(val);
+                desugar_builtin_in_expr(val);
             }
         }
         ast::Stmt::Expr(boxed) => {
-            desugar_console_in_expr(&mut boxed.value);
+            desugar_builtin_in_expr(&mut boxed.value);
         }
         ast::Stmt::Return(ret) => {
             if let Some(e) = ret {
-                desugar_console_in_expr(&mut e.value);
+                desugar_builtin_in_expr(&mut e.value);
             }
         }
         ast::Stmt::Assign(boxed) => {
-            desugar_console_in_expr(&mut boxed.value.target.value);
-            desugar_console_in_expr(&mut boxed.value.value.value);
+            desugar_builtin_in_expr(&mut boxed.value.target.value);
+            desugar_builtin_in_expr(&mut boxed.value.value.value);
         }
         ast::Stmt::If(boxed) => {
-            desugar_console_in_expr(&mut boxed.value.condition.value);
-            desugar_console_in_block(&mut boxed.value.then_block);
+            desugar_builtin_in_expr(&mut boxed.value.condition.value);
+            desugar_builtin_in_block(&mut boxed.value.then_block);
             if let Some(eb) = &mut boxed.value.else_block {
-                desugar_console_in_block(eb);
+                desugar_builtin_in_block(eb);
             }
         }
         ast::Stmt::For(boxed) => {
-            desugar_console_in_expr(&mut boxed.value.iterable.value);
-            desugar_console_in_block(&mut boxed.value.body);
+            desugar_builtin_in_expr(&mut boxed.value.iterable.value);
+            desugar_builtin_in_block(&mut boxed.value.body);
         }
         ast::Stmt::While(boxed) => {
-            desugar_console_in_expr(&mut boxed.value.condition.value);
-            desugar_console_in_block(&mut boxed.value.body);
+            desugar_builtin_in_expr(&mut boxed.value.condition.value);
+            desugar_builtin_in_block(&mut boxed.value.body);
         }
         ast::Stmt::Match(boxed) => {
-            desugar_console_in_expr(&mut boxed.value.value.value);
+            desugar_builtin_in_expr(&mut boxed.value.value.value);
             for arm in &mut boxed.value.arms {
-                desugar_console_in_block(&mut arm.body);
+                desugar_builtin_in_block(&mut arm.body);
             }
         }
         ast::Stmt::TryCatch(boxed) => {
-            desugar_console_in_block(&mut boxed.value.try_block);
-            desugar_console_in_block(&mut boxed.value.catch_block);
+            desugar_builtin_in_block(&mut boxed.value.try_block);
+            desugar_builtin_in_block(&mut boxed.value.catch_block);
         }
         ast::Stmt::OnlyGuard(boxed) => {
-            desugar_console_in_expr(&mut boxed.value.condition.value);
-            desugar_console_in_block(&mut boxed.value.body);
+            desugar_builtin_in_expr(&mut boxed.value.condition.value);
+            desugar_builtin_in_block(&mut boxed.value.body);
         }
         ast::Stmt::UnsafeBlock(boxed) => {
-            desugar_console_in_block(&mut boxed.value.body);
+            desugar_builtin_in_block(&mut boxed.value.body);
         }
         ast::Stmt::BcAssert(boxed) => {
-            desugar_console_in_expr(&mut boxed.value.condition.value);
+            desugar_builtin_in_expr(&mut boxed.value.condition.value);
         }
         ast::Stmt::Expect(boxed) => {
-            desugar_console_in_expr(&mut boxed.value.expr.value);
+            desugar_builtin_in_expr(&mut boxed.value.expr.value);
         }
         ast::Stmt::Todo(_) | ast::Stmt::Question(_) => {}
         ast::Stmt::Bench(boxed) => {
-            desugar_console_in_block(&mut boxed.value.body);
+            desugar_builtin_in_block(&mut boxed.value.body);
         }
     }
 }
 
-fn desugar_console_in_expr(expr: &mut ast::Expr) {
+fn desugar_builtin_in_expr(expr: &mut ast::Expr) {
     match expr {
         ast::Expr::Literal(_) | ast::Expr::Identifier(_) => {}
         ast::Expr::BinaryOp { left, right, .. } => {
-            desugar_console_in_expr(&mut left.value);
-            desugar_console_in_expr(&mut right.value);
+            desugar_builtin_in_expr(&mut left.value);
+            desugar_builtin_in_expr(&mut right.value);
         }
         ast::Expr::UnaryOp { operand, .. } => {
-            desugar_console_in_expr(&mut operand.value);
+            desugar_builtin_in_expr(&mut operand.value);
         }
         ast::Expr::Call { callee, args } => {
-            // Check if this is a `print` or `println` call
+            // Check if this is a `print` call
             if let ast::Expr::Identifier(name) = &callee.value {
-                let new_name = match name.as_str() {
-                    "print" => Some("__console_print".to_string()),
-                    "println" => Some("__console_println".to_string()),
-                    _ => None,
-                };
-                if let Some(new_name) = new_name {
-                    callee.value = ast::Expr::Identifier(new_name);
+                if name == "print" {
+                    callee.value = ast::Expr::Identifier("__console_print".to_string());
                 }
             }
-            desugar_console_in_expr(&mut callee.value);
+            desugar_builtin_in_expr(&mut callee.value);
             for arg in args {
-                desugar_console_in_expr(&mut arg.value);
+                desugar_builtin_in_expr(&mut arg.value);
             }
         }
         ast::Expr::MethodCall { object, method, args } => {
             // Check if object is "console" → desugar to __console_<method>
+            // or "fs" → desugar to __fs_<method>
             if let ast::Expr::Identifier(obj_name) = &object.value {
-                if obj_name == "console" {
-                    let aliased_name = format!("__console_{}", method);
+                let prefix = match obj_name.as_str() {
+                    "console" => "__console_",
+                    "fs" => "__fs_",
+                    _ => "",
+                };
+                if !prefix.is_empty() {
+                    let aliased_name = format!("{}{}", prefix, method);
                     let new_callee = ast::Expr::Identifier(aliased_name);
                     let mut new_args = Vec::new();
                     std::mem::swap(args, &mut new_args);
@@ -637,64 +639,64 @@ fn desugar_console_in_expr(expr: &mut ast::Expr) {
                     return;
                 }
             }
-            desugar_console_in_expr(&mut object.value);
+            desugar_builtin_in_expr(&mut object.value);
             for arg in args {
-                desugar_console_in_expr(&mut arg.value);
+                desugar_builtin_in_expr(&mut arg.value);
             }
         }
         ast::Expr::MemberAccess { target, field } => {
-            desugar_console_in_expr(&mut target.value);
+            desugar_builtin_in_expr(&mut target.value);
             let _ = field;
         }
         ast::Expr::IfThenElse { condition, then_expr, else_expr } => {
-            desugar_console_in_expr(&mut condition.value);
-            desugar_console_in_expr(&mut then_expr.value);
+            desugar_builtin_in_expr(&mut condition.value);
+            desugar_builtin_in_expr(&mut then_expr.value);
             if let Some(e) = else_expr {
-                desugar_console_in_expr(&mut e.value);
+                desugar_builtin_in_expr(&mut e.value);
             }
         }
         ast::Expr::Lambda { body, .. } => {
-            desugar_console_in_expr(&mut body.value);
+            desugar_builtin_in_expr(&mut body.value);
         }
         ast::Expr::Block(block) => {
-            desugar_console_in_block(block);
+            desugar_builtin_in_block(block);
         }
         ast::Expr::Array(items) => {
             for item in items {
-                desugar_console_in_expr(&mut item.value);
+                desugar_builtin_in_expr(&mut item.value);
             }
         }
         ast::Expr::Tuple(items) => {
             for item in items {
-                desugar_console_in_expr(&mut item.value);
+                desugar_builtin_in_expr(&mut item.value);
             }
         }
         ast::Expr::Record(fields) => {
             for (_, e) in fields {
-                desugar_console_in_expr(&mut e.value);
+                desugar_builtin_in_expr(&mut e.value);
             }
         }
         ast::Expr::Index { target, index } => {
-            desugar_console_in_expr(&mut target.value);
-            desugar_console_in_expr(&mut index.value);
+            desugar_builtin_in_expr(&mut target.value);
+            desugar_builtin_in_expr(&mut index.value);
         }
         ast::Expr::Range { start, end, .. } => {
-            desugar_console_in_expr(&mut start.value);
-            desugar_console_in_expr(&mut end.value);
+            desugar_builtin_in_expr(&mut start.value);
+            desugar_builtin_in_expr(&mut end.value);
         }
         ast::Expr::Spread(inner) => {
-            desugar_console_in_expr(&mut inner.value);
+            desugar_builtin_in_expr(&mut inner.value);
         }
         ast::Expr::BcAnnotation { expr: inner, .. } => {
-            desugar_console_in_expr(&mut inner.value);
+            desugar_builtin_in_expr(&mut inner.value);
         }
         ast::Expr::ErrorPropagate(inner) => {
-            desugar_console_in_expr(&mut inner.value);
+            desugar_builtin_in_expr(&mut inner.value);
         }
         ast::Expr::MatchExpression { value, arms } => {
-            desugar_console_in_expr(&mut value.value);
+            desugar_builtin_in_expr(&mut value.value);
             for arm in arms {
-                desugar_console_in_block(&mut arm.body);
+                desugar_builtin_in_block(&mut arm.body);
             }
         }
     }

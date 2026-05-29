@@ -15,6 +15,7 @@ const task = require('./task');
 const channel = require('./channel');
 const ui = require('./ui');
 const consoleMod = require('./console');
+const fsMod = require('./fs');
 
 module.exports = {
   // ARC
@@ -39,4 +40,7 @@ module.exports = {
 
   // Console / unified logging
   console: consoleMod,
+
+  // File system
+  fs: fsMod,
 };

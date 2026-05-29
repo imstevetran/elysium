@@ -1,5 +1,5 @@
 // Test unified logging: console.debug, info, warn, error, log
-// and bare print/println
+// and bare print
 
 func main() {
     console.debug("debug message")
@@ -8,12 +8,11 @@ func main() {
     console.error("error message")
     console.log("log message")
 
-    // Bare print and println
+    // Bare print
     print("bare print")
-    println("bare println")
 
     // With string values
     let name = "Elysium"
     console.info("Hello, ", name)
-    println("Goodbye, ", name)
+    print("Goodbye, ", name)
 }

@@ -74,6 +74,13 @@ pub enum MirStmt {
         args: Vec<MirValue>,
         dbg_line: u32,
     },
+    /// Filesystem call. When `result` is Some(name), the return value is stored into that alloca.
+    FsCall {
+        result: Option<String>,
+        method: String,
+        args: Vec<MirValue>,
+        dbg_line: u32,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -221,6 +228,22 @@ impl MirLowerer {
                 // For non-lazy lets with a value, store immediately
                 if let Some(val) = value {
                     if !is_lazy {
+                        // Check if the value is an __fs_* call (returns a value we need to capture)
+                        if let HirExpr::Call { callee, args } = val {
+                            if let HirExpr::Ident(cname) = callee.as_ref() {
+                                if cname.starts_with("__fs_") {
+                                    let method = cname.strip_prefix("__fs_").unwrap_or(cname).to_string();
+                                    let mir_args: Vec<MirValue> = args.iter().map(|a| self.lower_expr(a)).collect();
+                                    stmts.push(MirStmt::FsCall {
+                                        result: Some(name.clone()),
+                                        method,
+                                        args: mir_args,
+                                        dbg_line: line,
+                                    });
+                                    return;
+                                }
+                            }
+                        }
                         stmts.push(MirStmt::Store {
                             target: name.clone(),
                             value: self.lower_expr(val),
@@ -246,6 +269,17 @@ impl MirLowerer {
                             let method = name.strip_prefix("__console_").unwrap_or(name).to_string();
                             let mir_args: Vec<MirValue> = args.iter().map(|a| self.lower_expr(a)).collect();
                             stmts.push(MirStmt::ConsoleCall {
+                                method,
+                                args: mir_args,
+                                dbg_line: line,
+                            });
+                            return;
+                        }
+                        if name.starts_with("__fs_") {
+                            let method = name.strip_prefix("__fs_").unwrap_or(name).to_string();
+                            let mir_args: Vec<MirValue> = args.iter().map(|a| self.lower_expr(a)).collect();
+                            stmts.push(MirStmt::FsCall {
+                                result: None, // void context
                                 method,
                                 args: mir_args,
                                 dbg_line: line,

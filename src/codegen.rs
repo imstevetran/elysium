@@ -4,6 +4,7 @@ use crate::mir::*;
 use inkwell::context::Context;
 use inkwell::types::BasicType;
 use inkwell::values::BasicMetadataValueEnum;
+use inkwell::values::AnyValue;
 
 /// LLVM IR code generator for Elysium.
 pub struct Codegen {
@@ -121,6 +122,7 @@ impl Codegen {
             MirStmt::UnsafeBlock(_) => func.dbg_line,
             MirStmt::Bench { dbg_line, .. } => *dbg_line,
             MirStmt::ConsoleCall { dbg_line, .. } => *dbg_line,
+            MirStmt::FsCall { dbg_line, .. } => *dbg_line,
             _ => func.dbg_line,
         };
 
@@ -147,6 +149,9 @@ impl Codegen {
             }
             MirStmt::ConsoleCall { method, args, dbg_line: _ } => {
                 self.emit_console_call(method, args, builder)?;
+            }
+            MirStmt::FsCall { result, method, args, dbg_line: _ } => {
+                self.emit_fs_call(result, method, args, builder, func)?;
             }
             _ => {}
         }
@@ -308,7 +313,6 @@ impl Codegen {
             "warn" => "[WARN] ",
             "error" => "[ERROR] ",
             "print" => "",
-            "println" => "",
             _ => "[LOG] ",
         };
 
@@ -318,7 +322,7 @@ impl Codegen {
             fmt.push_str("%s");
             fmt.push(' '); // space between args
         }
-        if method == "println" || method == "debug" || method == "info"
+        if method == "debug" || method == "info"
             || method == "log" || method == "warn" || method == "error" {
             fmt.push('\n');
         }
@@ -396,5 +400,177 @@ impl Codegen {
                     .as_pointer_value()
             }
         }
+    }
+
+    /// Get an i8* from a MirValue argument (for passing to C functions).
+    fn mir_value_as_cstr_ptr(
+        &self,
+        val: &MirValue,
+        builder: &inkwell::builder::Builder<'static>,
+    ) -> Option<inkwell::values::PointerValue<'static>> {
+        match val {
+            MirValue::StringLit(s) => {
+                let gv = builder.build_global_string_ptr(s, "__fs_arg_str")
+                    .expect("fs arg str");
+                Some(gv.as_pointer_value())
+            }
+            _ => None,
+        }
+    }
+
+    /// Emit a filesystem call using C stdlib functions.
+    fn emit_fs_call(
+        &self,
+        _result: &Option<String>,
+        method: &str,
+        args: &[MirValue],
+        builder: &inkwell::builder::Builder<'static>,
+        _func: &MirFunction,
+    ) -> Result<()> {
+        let i32_ty = self.context.i32_type();
+        let i8_ty = self.context.i8_type();
+        let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::default());
+
+        match method {
+            "readFile" | "readFileSync" => {
+                if let Some(path) = args.first().and_then(|a| self.mir_value_as_cstr_ptr(a, builder)) {
+                    let open_ty = ptr_ty.fn_type(&[ptr_ty.into(), ptr_ty.into()], false);
+                    let open_fn = self.module.add_function("fopen", open_ty, None);
+                    let read_ty = ptr_ty.fn_type(&[ptr_ty.into(), i32_ty.into(), ptr_ty.into()], false);
+                    let read_fn = self.module.add_function("fgets", read_ty, None);
+                    let close_ty = i32_ty.fn_type(&[ptr_ty.into()], false);
+                    let close_fn = self.module.add_function("fclose", close_ty, None);
+                    let print_ty = i32_ty.fn_type(&[ptr_ty.into()], true);
+                    let print_fn = self.module.add_function("printf", print_ty, None);
+
+                    let mode_r = builder.build_global_string_ptr("r", "__fs_mode_r").expect("mode r");
+                    let fp_val = builder.build_call(open_fn, &[path.into(), mode_r.as_pointer_value().into()], "__fs_fp")
+                        .map_err(|e| crate::error::CompileError::new(format!("fopen: {}", e)))?
+                        .as_any_value_enum()
+                        .into_pointer_value();
+
+                    let buf = builder.build_alloca(i8_ty.array_type(4096), "__fs_buf").expect("buf");
+                    let zero = i32_ty.const_zero();
+                    let buf_ptr = unsafe {
+                        builder.build_in_bounds_gep(i8_ty.array_type(4096), buf, &[zero, zero], "__fs_buf_ptr")
+                    }.map_err(|e| crate::error::CompileError::new(format!("gep: {}", e)))?;
+
+                    let _ = builder.build_call(read_fn, &[buf_ptr.into(), i32_ty.const_int(4096, false).into(), fp_val.into()], "__fs_fgets")
+                        .map_err(|e| crate::error::CompileError::new(format!("fgets: {}", e)))?;
+                    let _ = builder.build_call(close_fn, &[fp_val.into()], "__fs_fclose")
+                        .map_err(|e| crate::error::CompileError::new(format!("fclose: {}", e)))?;
+
+                    let fmt = builder.build_global_string_ptr("%s\n", "__fs_fmt").expect("fmt");
+                    let _ = builder.build_call(print_fn, &[fmt.as_pointer_value().into(), buf_ptr.into()], "__fs_printf")
+                        .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+                }
+            }
+            "writeFile" | "appendFile" => {
+                let mode = if method == "writeFile" { "w" } else { "a" };
+                let path = args.get(0).and_then(|a| self.mir_value_as_cstr_ptr(a, builder));
+                let content = args.get(1).and_then(|a| self.mir_value_as_cstr_ptr(a, builder));
+                if let (Some(p), Some(c)) = (path, content) {
+                    let open_ty = ptr_ty.fn_type(&[ptr_ty.into(), ptr_ty.into()], false);
+                    let open_fn = self.module.add_function("fopen", open_ty, None);
+                    let write_ty = i32_ty.fn_type(&[ptr_ty.into(), ptr_ty.into()], false);
+                    let write_fn = self.module.add_function("fputs", write_ty, None);
+                    let close_ty = i32_ty.fn_type(&[ptr_ty.into()], false);
+                    let close_fn = self.module.add_function("fclose", close_ty, None);
+                    let mode_ptr = builder.build_global_string_ptr(mode, &format!("__fs_mode_{}", mode)).expect("mode");
+                    let fp_val = builder.build_call(open_fn, &[p.into(), mode_ptr.as_pointer_value().into()], "__fs_fp")
+                        .map_err(|e| crate::error::CompileError::new(format!("fopen: {}", e)))?
+                        .as_any_value_enum()
+                        .into_pointer_value();
+                    let _ = builder.build_call(write_fn, &[c.into(), fp_val.into()], "__fs_fputs")
+                        .map_err(|e| crate::error::CompileError::new(format!("fputs: {}", e)))?;
+                    let _ = builder.build_call(close_fn, &[fp_val.into()], "__fs_fclose")
+                        .map_err(|e| crate::error::CompileError::new(format!("fclose: {}", e)))?;
+                }
+            }
+            "removeFile" => {
+                if let Some(path) = args.get(0).and_then(|a| self.mir_value_as_cstr_ptr(a, builder)) {
+                    let remove_ty = i32_ty.fn_type(&[ptr_ty.into()], false);
+                    let remove_fn = self.module.add_function("remove", remove_ty, None);
+                    let _ = builder.build_call(remove_fn, &[path.into()], "__fs_remove")
+                        .map_err(|e| crate::error::CompileError::new(format!("remove: {}", e)))?;
+                }
+            }
+            "exists" | "isFile" | "isDir" => {
+                if let Some(path) = args.get(0).and_then(|a| self.mir_value_as_cstr_ptr(a, builder)) {
+                    let access_ty = i32_ty.fn_type(&[ptr_ty.into(), i32_ty.into()], false);
+                    let access_fn = self.module.add_function("access", access_ty, None);
+                    let _ = builder.build_call(access_fn, &[path.into(), i32_ty.const_zero().into()], "__fs_access")
+                        .map_err(|e| crate::error::CompileError::new(format!("access: {}", e)))?;
+                }
+            }
+            "createDir" => {
+                if let Some(path) = args.get(0).and_then(|a| self.mir_value_as_cstr_ptr(a, builder)) {
+                    let mkdir_ty = i32_ty.fn_type(&[ptr_ty.into(), i32_ty.into()], false);
+                    let mkdir_fn = self.module.add_function("mkdir", mkdir_ty, None);
+                    let _ = builder.build_call(mkdir_fn, &[path.into(), i32_ty.const_int(0o755, false).into()], "__fs_mkdir")
+                        .map_err(|e| crate::error::CompileError::new(format!("mkdir: {}", e)))?;
+                }
+            }
+            "removeDir" => {
+                if let Some(path) = args.get(0).and_then(|a| self.mir_value_as_cstr_ptr(a, builder)) {
+                    let rmdir_ty = i32_ty.fn_type(&[ptr_ty.into()], false);
+                    let rmdir_fn = self.module.add_function("rmdir", rmdir_ty, None);
+                    let _ = builder.build_call(rmdir_fn, &[path.into()], "__fs_rmdir")
+                        .map_err(|e| crate::error::CompileError::new(format!("rmdir: {}", e)))?;
+                }
+            }
+            "copyFile" => {
+                let src = args.get(0).and_then(|a| self.mir_value_as_cstr_ptr(a, builder));
+                let dst = args.get(1).and_then(|a| self.mir_value_as_cstr_ptr(a, builder));
+                if let (Some(s), Some(d)) = (src, dst) {
+                    let open_ty = ptr_ty.fn_type(&[ptr_ty.into(), ptr_ty.into()], false);
+                    let open_fn = self.module.add_function("fopen", open_ty, None);
+                    let read_ty = ptr_ty.fn_type(&[ptr_ty.into(), i32_ty.into(), ptr_ty.into()], false);
+                    let read_fn = self.module.add_function("fgets", read_ty, None);
+                    let write_ty = i32_ty.fn_type(&[ptr_ty.into(), ptr_ty.into()], false);
+                    let write_fn = self.module.add_function("fputs", write_ty, None);
+                    let close_ty = i32_ty.fn_type(&[ptr_ty.into()], false);
+                    let close_fn = self.module.add_function("fclose", close_ty, None);
+
+                    let mode_r = builder.build_global_string_ptr("r", "__fs_mode_r").expect("mode r");
+                    let mode_w = builder.build_global_string_ptr("w", "__fs_mode_w").expect("mode w");
+                    let src_fp = builder.build_call(open_fn, &[s.into(), mode_r.as_pointer_value().into()], "__fs_open_src")
+                        .map_err(|e| crate::error::CompileError::new(format!("fopen src: {}", e)))?
+                        .as_any_value_enum()
+                        .into_pointer_value();
+                    let dst_fp = builder.build_call(open_fn, &[d.into(), mode_w.as_pointer_value().into()], "__fs_open_dst")
+                        .map_err(|e| crate::error::CompileError::new(format!("fopen dst: {}", e)))?
+                        .as_any_value_enum()
+                        .into_pointer_value();
+
+                    let buf = builder.build_alloca(i8_ty.array_type(4096), "__fs_copy_buf").expect("buf");
+                    let zero = i32_ty.const_zero();
+                    let buf_ptr = unsafe {
+                        builder.build_in_bounds_gep(i8_ty.array_type(4096), buf, &[zero, zero], "__fs_buf_ptr")
+                    }.map_err(|e| crate::error::CompileError::new(format!("gep: {}", e)))?;
+                    let _ = builder.build_call(read_fn, &[buf_ptr.into(), i32_ty.const_int(4096, false).into(), src_fp.into()], "__fs_fgets")
+                        .map_err(|e| crate::error::CompileError::new(format!("fgets: {}", e)))?;
+                    let _ = builder.build_call(write_fn, &[buf_ptr.into(), dst_fp.into()], "__fs_fputs")
+                        .map_err(|e| crate::error::CompileError::new(format!("fputs: {}", e)))?;
+
+                    let _ = builder.build_call(close_fn, &[src_fp.into()], "__fs_fclose_src")
+                        .map_err(|e| crate::error::CompileError::new(format!("fclose: {}", e)))?;
+                    let _ = builder.build_call(close_fn, &[dst_fp.into()], "__fs_fclose_dst")
+                        .map_err(|e| crate::error::CompileError::new(format!("fclose: {}", e)))?;
+                }
+            }
+            "rename" => {
+                let old = args.get(0).and_then(|a| self.mir_value_as_cstr_ptr(a, builder));
+                let new = args.get(1).and_then(|a| self.mir_value_as_cstr_ptr(a, builder));
+                if let (Some(o), Some(n)) = (old, new) {
+                    let rename_ty = i32_ty.fn_type(&[ptr_ty.into(), ptr_ty.into()], false);
+                    let rename_fn = self.module.add_function("rename", rename_ty, None);
+                    let _ = builder.build_call(rename_fn, &[o.into(), n.into()], "__fs_rename")
+                        .map_err(|e| crate::error::CompileError::new(format!("rename: {}", e)))?;
+                }
+            }
+            _ => {}
+        }
+        Ok(())
     }
 }

@@ -14,29 +14,30 @@ func describe_score(score: Int) -> String {
 
 func main() {
     let s1 = describe_score(100)
-    println(s1)
+    print(s1)
+    print("\n")
 
     // switch as a statement
     let x = 3
     switch x {
-        case 1 then { println("one") }
-        case 2 then { println("two") }
-        case 3 then { println("three") }
-        else { println("many") }
+        case 1 then { print("one\n") }
+        case 2 then { print("two\n") }
+        case 3 then { print("three\n") }
+        else { print("many\n") }
     }
 
     // with _ wildcard
     let y = 42
     switch y {
-        case 0 then { println("zero") }
-        case _ then { println("non-zero") }
+        case 0 then { print("zero\n") }
+        case _ then { print("non-zero\n") }
     }
 
     // string patterns
     let name = "bob"
     switch name {
-        case "alice" then { println("hi alice") }
-        case "bob" then { println("hi bob") }
-        else { println("hi stranger") }
+        case "alice" then { print("hi alice\n") }
+        case "bob" then { print("hi bob\n") }
+        else { print("hi stranger\n") }
     }
 }
