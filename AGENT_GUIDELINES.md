@@ -153,32 +153,51 @@ The `question` keyword was chosen over `oq` or `concern` because it's the most i
   - WebSocket: `wsConnect(url: String) → String`, `wsSend(conn: String, data: String) → Nil`, `wsClose(conn: String) → Nil`
   - MQTT: `mqttConnect(broker: String, clientId: String) → String`, `mqttPublish(client: String, topic: String, msg: String) → Nil`, `mqttSubscribe(client: String, topic: String) → Nil`, `mqttDisconnect(client: String) → Nil`
 - MIR: Uses `MirStmt::TransportCall { result, method, args, dbg_line }` for both void and return-value contexts
-- Codegen (`emit_transport_call`): prints a stub message `[transport] method: use JS runtime\n` — transport is JS-runtime-only
+- Codegen (`emit_transport_call`):
+  - HTTP methods (get/post/put/delete): builds shell command at runtime via `snprintf("curl -s -m 10 '%s'", url)` + `popen`, captures stdout
+  - WebSocket & MQTT: print stub `[transport] method: use JS runtime\n` — these require event-loop infrastructure
 - JS runtime `npm-package/runtime/transport.js` provides:
   - **HTTP** via `get`, `post`, `put`, `delete` using `fetch` (Node 18+ / browser) or `node-fetch` polyfill
   - **WebSocket** via `wsConnect`, `wsSend`, `wsClose` using `WebSocket` (browser) or `ws` package (Node)
   - **MQTT** via `mqttConnect`, `mqttPublish`, `mqttSubscribe`, `mqttDisconnect` using `mqtt` package (Node-only)
   - **Status codes** via `transport.status.OK`, `status.NOT_FOUND`, etc.
 - Exported via `require('elysium-lang').transport`
+- **Scope decision (May 2026)**: transport is scoped to IP-based protocols (HTTP, WebSocket, MQTT). Bluetooth and WiFi Direct are NOT added because:
+  - They require platform-specific APIs (BlueZ, CoreBluetooth) with no portable C backend
+  - Web Bluetooth is browser-only, BLE-only, and requires user gestures
+  - WiFi Direct has no standard C or browser API
+  - They follow a fundamentally different paradigm (device discovery, pairing, GATT) vs the current connection/message model
 
-### String Package (added May 2026)
+| String Package (added May 2026)
 - String utility operations via `string.length(x)` or `"hello".length()` method-call syntax
 - Two desugaring paths in `main.rs` (`desugar_builtin_calls`):
   - **Namespace**: `string.method(...)` → `__string_method(...)` (same pattern as fs/transport)
   - **Method call on any value**: `x.length()`, `"hello".toUpper()` → `__string_method(receiver, ...)`
     - The receiver is cloned and prepended as the first argument
-    - Recognized by `is_string_method()` — supports 25+ string methods
+    - Recognized by `is_string_method()` — supports 30+ string methods
 - Type checker registers `__string_*` builtins:
   - `(String) → Int`: `length`, `charCodeAt`, `indexOf`, `lastIndexOf`, `search`
   - `(String) → Bool`: `isEmpty`, `startsWith`, `endsWith`, `contains`, `includes`
   - `(String) → String`: `toUpper`, `toLower`, `trim`, `trimStart`, `trimEnd`, `toString`,
     `charAt`, `slice`, `substring`, `replace`, `concat`, `padStart`, `padEnd`, `repeat`, `split`, `match`
+  - `(String) → String` (crypto): `sha256`, `md5`, `base64Encode`, `base64Decode`, `hexEncode`, `hexDecode`
+  - `(String, String) → String` (crypto): `hmac`
 - MIR: Uses `MirStmt::StringCall { result, method, args, dbg_line }` for both void and return-value contexts
 - Codegen (`emit_string_call`):
   - `length`: uses C `strlen`, stores result as i64
   - `isEmpty`: uses C `strlen`, compares to zero, stores result as bool
-  - All other methods: prints stub `[string] method: use JS runtime\n`
-- JS runtime `npm-package/runtime/string.js` maps every method to native JavaScript `String.prototype`
+  - `contains`/`includes`: uses C `strstr`, checks for non-null
+  - `startsWith`: uses C `strncmp`
+  - `endsWith`: uses C `strlen` + GEP offset + `strncmp`
+  - `indexOf`/`lastIndexOf`/`search`: uses C `strstr` + pointer arithmetic, returns -1 on no match
+  - `charAt`: GEP loads byte, builds 2-char buffer + null terminator
+  - `charCodeAt`: GEP loads byte, zero-extends to i64
+  - `toString`/`toUpper`/`toLower`/`trim`/`trimStart`/`trimEnd`/`concat`/`padStart`/`padEnd`/`repeat`/`split`: `snprintf` to 4KB stack buffer, prints to stdout
+  - `slice`/`substring`: GEP offset + `snprintf` with `%.*s`
+  - `replace`: `snprintf` copy (simple case)
+  - `uuid`: `popen("uuidgen")` + `fgets` + `printf`
+  - Crypto (`sha256`/`md5`/`base64Encode`/`base64Decode`/`hexEncode`/`hexDecode`/`hmac`): builds shell command at runtime via `snprintf` + `popen` with openssl/xxd, captures stdout
+- JS runtime `npm-package/runtime/string.js` maps every method to native JavaScript `String.prototype`; crypto methods use Node `crypto.createHash`/`createHmac` and `Buffer` with browser fallbacks (btoa/atob for base64, manual hex)
 - Exported via `require('elysium-lang').string`
 
 ### Regex Package (added May 2026)
@@ -191,7 +210,10 @@ The `question` keyword was chosen over `oq` or `concern` because it's the most i
   - `replace(pattern: String, str: String, replacement: String) → String`
   - `split(pattern: String, str: String) → String`
 - MIR: Uses `MirStmt::RegexCall { result, method, args, dbg_line }`
-- Codegen (`emit_regex_call`): prints `[regex] method: use JS runtime\n` — regex is JS-runtime-only
+- Codegen (`emit_regex_call`):
+  - `test`: compiles regex via C `regcomp` (REG_EXTENDED) + `regexec`, returns bool
+  - `search`: compiles regex + `regexec` with `regmatch_t`, returns `rm_so` offset (or -1)
+  - `match`/`replace`/`split`: print pattern/subject info (real implementation needs dynamic string allocation)
 - JS runtime `npm-package/runtime/regex.js` wraps native JavaScript `RegExp` with try/catch safety
 - Exported via `require('elysium-lang').regex`
 
