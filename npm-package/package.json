@@ -11,7 +11,8 @@
   "license": "MIT",
   "author": "Steve Tran",
   "bin": {
-    "elysium": "./bin/elysium.js"
+    "elysium": "./bin/elysium.js",
+    "ely": "./bin/ely.js"
   },
   "main": "./runtime/index.js",
   "exports": {

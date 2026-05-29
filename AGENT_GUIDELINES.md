@@ -54,7 +54,7 @@ The `question` keyword was chosen over `oq` or `concern` because it's the most i
 - Located in `npm-package/` directory
 - Published as `elysium-lang` on npm
 - Ships:
-  - **CLI binary** (`elysium` command) — the full Rust compiler, downloaded/built during `npm install`
+  - **CLI binary** (`elysium` or `ely` command) — the full Rust compiler, downloaded/built during `npm install`
   - **JavaScript runtime** (`require('elysium-lang')`) — mirrors `elysium-rt` Rust crate as JS
 - **Runtime modules**:
   - `arc.js` — `Ref`, `Weak`, `Unowned` (reference counting)

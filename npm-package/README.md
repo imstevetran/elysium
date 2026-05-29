@@ -50,6 +50,7 @@ const patches = diff(oldViews, newViews);
 
 | Command | Description |
 |---------|-------------|
+| `elysium` or `ely` | CLI commands — `ely` is a shorter alias |
 | `elysium build <file>` | Compile to native binary |
 | `elysium run <file>` | Compile and run |
 | `elysium check <file>` | Type-check only |
