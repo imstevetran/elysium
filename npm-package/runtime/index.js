@@ -14,6 +14,7 @@ const arc = require('./arc');
 const task = require('./task');
 const channel = require('./channel');
 const ui = require('./ui');
+const consoleMod = require('./console');
 
 module.exports = {
   // ARC
@@ -35,4 +36,7 @@ module.exports = {
   diff: ui.diff,
   Patch: ui.Patch,
   Axis: ui.Axis,
+
+  // Console / unified logging
+  console: consoleMod,
 };

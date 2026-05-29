@@ -118,3 +118,13 @@ The `question` keyword was chosen over `oq` or `concern` because it's the most i
   - `else` block becomes a `Wildcard` pattern arm
   - Supports both statement and expression forms
 - `parse_pattern` supports: `_` (wildcard as `Pattern::Wildcard`), integers, floats, bools, nil, strings, identifiers (bindings), enum variants, `only Type`
+
+### Unified Logging — Console (added May 2026)
+- `console.debug("msg")`, `console.info("msg")`, `console.warn("msg")`, `console.error("msg")`, `console.log("msg")` are supported syntax
+- Also `print(x)` and `println(x)` are supported
+- **Backend (compiled binary)**: `console.*` desugars to `__console_*` builtins → MIR `ConsoleCall` → LLVM `printf` with `[DEBUG]`, `[INFO]`, `[WARN]`, `[ERROR]` prefixes
+- **Client-side / Node**: `npm-package/runtime/console.js` maps to native `console.*` API with environment detection (browser vs Node vs fallback)
+- Desugaring happens in `main.rs` via `desugar_console_calls()` → `desugar_console_in_expr()` which converts `console.method(...)` → `__console_method(...)` and `print`/`println` → `__console_print`/`__console_println`
+- Type checker has `__console_*` registered as `(Infer) → Nil` builtins
+- Codegen `emit_console_call()` builds a printf format string with the prefix, formats each arg as `%s`, and appends `\n` for println/debug/info/warn/error/log
+- JS runtime `console.js` exports `{ debug, info, warn, error, log }` — access via `require('elysium-lang/runtime/console')` or `require('elysium-lang').console`

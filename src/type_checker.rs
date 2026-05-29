@@ -62,6 +62,26 @@ impl TypeChecker {
                 is_async: false,
             },
         );
+        // console.* builtins (desugared from console.debug/warn/info/log/error)
+        // and bare print/println (desugared to __console_print/__console_println)
+        for name in &[
+            "__console_debug",
+            "__console_info",
+            "__console_warn",
+            "__console_error",
+            "__console_log",
+            "__console_print",
+            "__console_println",
+        ] {
+            self.functions.insert(
+                name.to_string(),
+                FunctionSignature {
+                    param_types: vec![Type::Infer],
+                    return_type: Box::new(Type::Nil),
+                    is_async: false,
+                },
+            );
+        }
         self.functions.insert(
             "sum".into(),
             FunctionSignature {

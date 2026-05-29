@@ -120,6 +120,7 @@ impl Codegen {
             MirStmt::CondBranch { dbg_line, .. } => *dbg_line,
             MirStmt::UnsafeBlock(_) => func.dbg_line,
             MirStmt::Bench { dbg_line, .. } => *dbg_line,
+            MirStmt::ConsoleCall { dbg_line, .. } => *dbg_line,
             _ => func.dbg_line,
         };
 
@@ -143,6 +144,9 @@ impl Codegen {
             }
             MirStmt::Bench { .. } => {
                 self.emit_bench_stmt(stmt, builder, func)?;
+            }
+            MirStmt::ConsoleCall { method, args, dbg_line: _ } => {
+                self.emit_console_call(method, args, builder)?;
             }
             _ => {}
         }
@@ -275,6 +279,121 @@ impl Codegen {
             MirType::Bool => self.context.bool_type().as_basic_type_enum(),
             MirType::String | MirType::Char | MirType::Nil | MirType::Ptr(_) | MirType::Array(_) => {
                 self.context.i8_type().as_basic_type_enum()
+            }
+        }
+    }
+
+    /// Emit a printf-based console call.
+    /// The format string embeds the log level prefix and formats all args.
+    fn emit_console_call(
+        &self,
+        method: &str,
+        args: &[MirValue],
+        builder: &inkwell::builder::Builder<'static>,
+    ) -> Result<()> {
+        let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::default());
+        let i32_ty = self.context.i32_type();
+
+        // Declare printf once
+        let printf_fn = self.module.add_function(
+            "printf",
+            i32_ty.fn_type(&[ptr_ty.into()], true),
+            None,
+        );
+
+        // Determine prefix based on method
+        let prefix = match method.as_ref() {
+            "debug" => "[DEBUG] ",
+            "info" | "log" => "[INFO] ",
+            "warn" => "[WARN] ",
+            "error" => "[ERROR] ",
+            "print" => "",
+            "println" => "",
+            _ => "[LOG] ",
+        };
+
+        // Build format string: prefix + specifiers for each arg + newline for println
+        let mut fmt = prefix.to_string();
+        for _ in args {
+            fmt.push_str("%s");
+            fmt.push(' '); // space between args
+        }
+        if method == "println" || method == "debug" || method == "info"
+            || method == "log" || method == "warn" || method == "error" {
+            fmt.push('\n');
+        }
+
+        // Create the format string as a global
+        let fmt_name = format!("__console_{}_fmt", method);
+        let fmt_global = builder.build_global_string_ptr(&fmt, &fmt_name)
+            .map_err(|e| crate::error::CompileError::new(format!("console fmt: {}", e)))?;
+        let fmt_ptr = fmt_global.as_pointer_value();
+
+        // Convert each arg to a string pointer representation
+        let mut printf_args: Vec<BasicMetadataValueEnum> = vec![fmt_ptr.into()];
+        for arg in args {
+            let str_val = self.console_arg_to_string(arg, builder);
+            printf_args.push(str_val.into());
+        }
+
+        builder.build_call(printf_fn, &printf_args, &format!("__console_{}_call", method))
+            .map_err(|e| crate::error::CompileError::new(format!("printf console: {}", e)))?;
+
+        Ok(())
+    }
+
+    /// Convert a single MirValue argument into a `char*` string pointer for printf("%s", ...).
+    fn console_arg_to_string(
+        &self,
+        val: &MirValue,
+        builder: &inkwell::builder::Builder<'static>,
+    ) -> inkwell::values::PointerValue<'static> {
+        match val {
+            MirValue::IntLit(v) => {
+                // Build a formatted string like "42" as a global
+                let s = format!("{}", v);
+                builder.build_global_string_ptr(&s, "__console_arg_str")
+                    .expect("global arg str")
+                    .as_pointer_value()
+            }
+            MirValue::FloatLit(v) => {
+                let s = format!("{}", v);
+                builder.build_global_string_ptr(&s, "__console_arg_str")
+                    .expect("global arg str")
+                    .as_pointer_value()
+            }
+            MirValue::BoolLit(v) => {
+                let s = if *v { "true" } else { "false" };
+                builder.build_global_string_ptr(s, "__console_arg_str")
+                    .expect("global arg str")
+                    .as_pointer_value()
+            }
+            MirValue::StringLit(s) => {
+                builder.build_global_string_ptr(s, "__console_arg_str")
+                    .expect("global arg str")
+                    .as_pointer_value()
+            }
+            MirValue::CharLit(c) => {
+                let s = format!("{}", c);
+                builder.build_global_string_ptr(&s, "__console_arg_str")
+                    .expect("global arg str")
+                    .as_pointer_value()
+            }
+            MirValue::Nil => {
+                builder.build_global_string_ptr("nil", "__console_arg_str")
+                    .expect("global arg str")
+                    .as_pointer_value()
+            }
+            MirValue::Local(name) => {
+                // Try to load from alloca — but for now emit "?" placeholder
+                builder.build_global_string_ptr(&format!("<{}>", name), "__console_arg_str")
+                    .expect("global arg str")
+                    .as_pointer_value()
+            }
+            MirValue::BinaryOp { .. } | MirValue::UnaryOp { .. } => {
+                builder.build_global_string_ptr("<expr>", "__console_arg_str")
+                    .expect("global arg str")
+                    .as_pointer_value()
             }
         }
     }

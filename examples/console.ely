@@ -1,0 +1,19 @@
+// Test unified logging: console.debug, info, warn, error, log
+// and bare print/println
+
+func main() {
+    console.debug("debug message")
+    console.info("info message")
+    console.warn("warn message")
+    console.error("error message")
+    console.log("log message")
+
+    // Bare print and println
+    print("bare print")
+    println("bare println")
+
+    // With string values
+    let name = "Elysium"
+    console.info("Hello, ", name)
+    println("Goodbye, ", name)
+}

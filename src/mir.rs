@@ -69,6 +69,11 @@ pub enum MirStmt {
         body_stmts: Vec<MirStmt>,
         dbg_line: u32,
     },
+    ConsoleCall {
+        method: String,
+        args: Vec<MirValue>,
+        dbg_line: u32,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -234,6 +239,21 @@ impl MirLowerer {
                 }
             }
             HirStmt::Expr(expr, _) => {
+                // Check if this is a console call expression
+                if let HirExpr::Call { callee, args } = expr {
+                    if let HirExpr::Ident(name) = callee.as_ref() {
+                        if name.starts_with("__console_") {
+                            let method = name.strip_prefix("__console_").unwrap_or(name).to_string();
+                            let mir_args: Vec<MirValue> = args.iter().map(|a| self.lower_expr(a)).collect();
+                            stmts.push(MirStmt::ConsoleCall {
+                                method,
+                                args: mir_args,
+                                dbg_line: line,
+                            });
+                            return;
+                        }
+                    }
+                }
                 let val = self.lower_expr(expr);
                 stmts.push(MirStmt::Call {
                     result: None,
