@@ -10,6 +10,11 @@ use std::path::PathBuf;
 fn main() {
     let cli = cli::Cli::parse();
 
+    // Load .env file before dispatching commands
+    if let Err(e) = load_env_file(&cli.env_file) {
+        eprintln!("Warning: failed to load env file '{}': {}", cli.env_file, e);
+    }
+
     let result = match &cli.command {
         cli::Commands::Init { name, version, description, author, license, force } => {
             cmd_init(name, version, description, author, license, *force)
@@ -254,6 +259,7 @@ fn cmd_publish() -> Result<(), String> {
         "target",
         "Cargo.lock",
         "elysium.lock",
+        ".env",
     ];
 
     add_dir_to_tar(&cwd, &cwd, &mut archive, &excludes)
@@ -500,11 +506,72 @@ fn cmd_list() -> Result<(), String> {
 
 // =============== Helpers ===============
 
+/// Load environment variables from a .env file.
+///
+/// Defaults to `.env` in the current directory. Skips silently if the file
+/// doesn't exist. Lines are parsed as `KEY=VALUE` (supports quoted values and
+/// comments with `#`).
+fn load_env_file(path: &str) -> Result<(), String> {
+    let env_path = std::path::Path::new(path);
+    if !env_path.exists() {
+        // Default .env is optional — skip silently
+        if path == ".env" {
+            return Ok(());
+        }
+        return Err(format!("file not found: {}", path));
+    }
+
+    let content = std::fs::read_to_string(env_path)
+        .map_err(|e| format!("cannot read {}: {}", path, e))?;
+
+    for (line_num, line) in content.lines().enumerate() {
+        let trimmed = line.trim();
+
+        // Skip empty lines and comments
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+
+        // Split on the first '='
+        if let Some(eq_pos) = trimmed.find('=') {
+            let key = trimmed[..eq_pos].trim().to_string();
+            let mut value = trimmed[eq_pos + 1..].trim().to_string();
+
+            // Strip surrounding quotes if present
+            if (value.starts_with('"') && value.ends_with('"'))
+                || (value.starts_with('\'') && value.ends_with('\''))
+            {
+                let len = value.len();
+                value = value[1..len - 1].to_string();
+            }
+
+            if key.is_empty() {
+                return Err(format!("{}:{}: empty key", path, line_num + 1));
+            }
+
+            std::env::set_var(&key, &value);
+        } else {
+            return Err(format!("{}:{}: malformed line (expected KEY=VALUE)", path, line_num + 1));
+        }
+    }
+
+    Ok(())
+}
+
 fn load_token() -> Result<String, String> {
+    // Check environment variable first (can be set via .env file)
+    if let Ok(token) = std::env::var("EPM_GIT_TOKEN") {
+        let trimmed = token.trim().to_string();
+        if !trimmed.is_empty() {
+            return Ok(trimmed);
+        }
+    }
+
+    // Fall back to stored token file
     let home = std::env::var("HOME").map_err(|_| "HOME not set".to_string())?;
     let token_path = PathBuf::from(&home).join(".epm").join("token");
     let token = std::fs::read_to_string(&token_path)
-        .map_err(|_| "Not logged in. Run `epm login <token>` first.".to_string())?;
+        .map_err(|_| "Not logged in. Set EPM_GIT_TOKEN in your .env file or run `epm login <token>` first.".to_string())?;
     Ok(token.trim().to_string())
 }
 

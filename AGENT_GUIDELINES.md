@@ -38,15 +38,17 @@ The `question` keyword was chosen over `oq` or `concern` because it's the most i
 - `epm install --shake` — install and tree-shake in one step
 - `epm login <token>` — store GitHub PAT for publish auth
 - `epm list` — list installed packages in `elysium_modules/`
+- `epm --env-file <path> <command>` — use a custom .env file (defaults to `.env` in current directory)
 - Manifest file: `elysium.json` (name, version, description, entry, license, author, repository, dependencies)
 - Lockfile: `elysium.lock` (auto-generated, stores resolved version for each dep, checked in to git)
 - Registry lives at `https://github.com/imstevetran/epm-registry.git`
 - Registry structure: `registry.json` (JSON index of all packages) + `packages/` (tarballs)
 - EPM caches the registry clone in `~/.epm/.epm-registry/` and fetched manifests in `~/.epm/manifests/`
 - Token stored in `~/.epm/token` with `chmod 600`
-- Published tarballs exclude: `elysium_modules/`, `.git/`, `.epm/`, `target/`, `Cargo.lock`, `elysium.lock`
+- Published tarballs exclude: `elysium_modules/`, `.git/`, `.epm/`, `target/`, `Cargo.lock`, `elysium.lock`, `.env`
 - Tree-shaking: walks dependency tree, follows `import` statements from each package's entry point,
   removes any `.ely` file not reachable via the import graph
+- `.env` support: `epm` loads `.env` from the current directory on every command. Use `--env-file <path>` to specify a different file. The token can also be set via `EPM_GIT_TOKEN` env var instead of `epm login`.
 
 ### Flat Dependency Resolution (epm resolver)
 - Default mode: single version per package name

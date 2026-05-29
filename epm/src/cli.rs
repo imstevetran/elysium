@@ -3,6 +3,10 @@ use clap::{Parser, Subcommand};
 #[derive(Parser)]
 #[command(name = "epm", version = "0.1.0", about = "Elysium Package Manager")]
 pub struct Cli {
+    /// Path to .env file (defaults to .env in current directory)
+    #[arg(short = 'e', long = "env-file", default_value = ".env", global = true)]
+    pub env_file: String,
+
     #[command(subcommand)]
     pub command: Commands,
 }

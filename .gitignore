@@ -17,6 +17,7 @@ output.bc
 elysium_modules/
 .epm/
 elysium.lock
+.env
 
 # macOS
 .DS_Store
