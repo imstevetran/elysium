@@ -16,6 +16,7 @@ output.bc
 # EPM package manager
 elysium_modules/
 .epm/
+elysium.lock
 
 # macOS
 .DS_Store

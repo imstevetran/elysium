@@ -43,7 +43,13 @@ pub enum Commands {
         /// Tree-shake installed packages after installation
         #[arg(long)]
         shake: bool,
+        /// Allow multiple versions of the same dependency (legacy mode)
+        #[arg(long)]
+        legacy: bool,
     },
+
+    /// Generate a lockfile (elysium.lock) from current resolution
+    Lock,
 
     /// Publish the current package to the registry
     Publish {

@@ -1,6 +1,7 @@
 mod cli;
 mod manifest;
 mod registry;
+mod resolver;
 mod tree_shake;
 
 use clap::Parser;
@@ -13,8 +14,11 @@ fn main() {
         cli::Commands::Init { name, version, description, author, license, force } => {
             cmd_init(name, version, description, author, license, *force)
         }
-        cli::Commands::Install { package, version, save, shake } => {
-            cmd_install(package.as_deref(), version.as_deref(), *save, *shake)
+        cli::Commands::Install { package, version, save, shake, legacy } => {
+            cmd_install(package.as_deref(), version.as_deref(), *save, *shake, *legacy)
+        }
+        cli::Commands::Lock => {
+            cmd_lock()
         }
         cli::Commands::Publish { registry: _ } => {
             cmd_publish()
@@ -94,6 +98,7 @@ fn cmd_install(
     version: Option<&str>,
     save: bool,
     shake: bool,
+    legacy: bool,
 ) -> Result<(), String> {
     match package {
         None => {
@@ -106,20 +111,40 @@ fn cmd_install(
                 return Ok(());
             }
 
+            println!("Resolving dependencies (legacy={}) ...", legacy);
+
+            let resolution = if legacy {
+                resolver::resolve_legacy(&manifest.name, &manifest.version, &manifest.dependencies)?
+            } else {
+                resolver::resolve(&manifest.name, &manifest.version, &manifest.dependencies)?
+            };
+
+            println!("Resolution:");
+            for dep in &resolution.tree {
+                println!("  {}@{}", dep.name, dep.version);
+            }
+
+            // Install all resolved deps
             let deps_dir = cwd.join("elysium_modules");
             std::fs::create_dir_all(&deps_dir)
                 .map_err(|e| format!("Cannot create elysium_modules dir: {}", e))?;
 
-            let total = manifest.dependencies.len();
-            for (i, (dep_name, dep_ver)) in manifest.dependencies.iter().enumerate() {
-                println!("[{}/{}] Installing {}@{} ...", i + 1, total, dep_name, dep_ver);
-                let target_dir = deps_dir.join(dep_name);
-                let ver = if dep_ver.is_empty() || dep_ver == "*" { None } else { Some(dep_ver.as_str()) };
-                registry::install_package(dep_name, ver, &target_dir)?;
+            let total = resolution.tree.len();
+            for (i, dep) in resolution.tree.iter().enumerate() {
+                println!("[{}/{}] Installing {}@{} ...", i + 1, total, dep.name, dep.version);
+                let target_dir = deps_dir.join(&dep.name);
+                if target_dir.exists() {
+                    // Remove existing to reinstall correct version
+                    std::fs::remove_dir_all(&target_dir)
+                        .map_err(|e| format!("Cannot remove old {}: {}", dep.name, e))?;
+                }
+                registry::install_package(&dep.name, Some(&dep.version), &target_dir)?;
                 println!("  -> installed to {}", target_dir.display());
             }
 
-            println!("All dependencies installed.");
+            // Write lockfile
+            resolver::write_lockfile(&cwd, &resolution)?;
+            println!("Lockfile written to elysium.lock");
 
             if shake {
                 println!("\nTree-shaking installed packages...");
@@ -160,6 +185,27 @@ fn cmd_install(
             Ok(())
         }
     }
+}
+
+fn cmd_lock() -> Result<(), String> {
+    let cwd = std::env::current_dir().map_err(|e| format!("Cannot get current dir: {}", e))?;
+    let manifest = manifest::Manifest::load_from_dir(&cwd)?;
+
+    if manifest.dependencies.is_empty() {
+        println!("No dependencies to lock.");
+        return Ok(());
+    }
+
+    let resolution = resolver::resolve(&manifest.name, &manifest.version, &manifest.dependencies)?;
+
+    println!("Locking dependencies for {}@{}:", manifest.name, manifest.version);
+    for dep in &resolution.tree {
+        println!("  {}@{}", dep.name, dep.version);
+    }
+
+    resolver::write_lockfile(&cwd, &resolution)?;
+    println!("Lockfile written to elysium.lock");
+    Ok(())
 }
 
 fn cmd_publish() -> Result<(), String> {
@@ -204,6 +250,7 @@ fn cmd_publish() -> Result<(), String> {
         ".epm",
         "target",
         "Cargo.lock",
+        "elysium.lock",
     ];
 
     add_dir_to_tar(&cwd, &cwd, &mut archive, &excludes)
@@ -280,22 +327,35 @@ fn cmd_info(package: &str) -> Result<(), String> {
 fn cmd_tree(_all: bool) -> Result<(), String> {
     let cwd = std::env::current_dir().map_err(|e| format!("Cannot get current dir: {}", e))?;
     let manifest = manifest::Manifest::load_from_dir(&cwd)?;
-    let deps_dir = cwd.join("elysium_modules");
 
-    if !deps_dir.exists() {
-        println!("No dependencies installed. Run `epm install` first.");
+    // First try lockfile
+    let lockfile = resolver::read_lockfile(&cwd)?;
+
+    if let Some(resolution) = lockfile {
+        println!("Dependency tree for {}@{} (from elysium.lock):", manifest.name, manifest.version);
+        if resolution.tree.is_empty() {
+            println!("(no dependencies)");
+        } else {
+            for dep in &resolution.tree {
+                println!("  {}@{}", dep.name, dep.version);
+            }
+        }
         return Ok(());
     }
 
-    let tree = tree_shake::build_dep_tree(&manifest, &deps_dir);
-    println!("Dependency tree for {}@{}:", manifest.name, manifest.version);
-    for child in &tree.children {
-        tree_shake::print_tree(child, 0);
+    // No lockfile: resolve from manifest directly (flat)
+    println!("Resolving dependency tree for {}@{} ...", manifest.name, manifest.version);
+
+    if manifest.dependencies.is_empty() {
+        println!("(no dependencies)");
+        return Ok(());
     }
 
-    if tree.children.is_empty() {
-        println!("(no dependencies)");
+    let resolution = resolver::resolve(&manifest.name, &manifest.version, &manifest.dependencies)?;
+    for dep in &resolution.tree {
+        println!("  {}@{}", dep.name, dep.version);
     }
+
     Ok(())
 }
 
