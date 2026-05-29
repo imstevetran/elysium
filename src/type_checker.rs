@@ -89,37 +89,35 @@ impl TypeChecker {
     }
 
     pub fn check_program(&mut self, program: &Program) -> Result<()> {
-        // First pass: collect all function signatures
+        // First pass: collect all function signatures (including class methods)
         for item in &program.items {
-            if let Item::Function(f) = &item.value {
-                let sig = self.infer_function_signature(f);
-                self.functions.insert(f.name.clone(), sig);
+            match &item.value {
+                Item::Function(f) => {
+                    let sig = self.infer_function_signature(f);
+                    self.functions.insert(f.name.clone(), sig);
+                }
+                Item::Class(c) => {
+                    for method in &c.methods {
+                        let sig = self.infer_function_signature(method);
+                        self.functions.insert(method.name.clone(), sig);
+                    }
+                }
+                _ => {}
             }
         }
 
         // Second pass: check bodies
         for item in &program.items {
-            if let Item::Function(f) = &item.value {
-                // Skip stub functions — no body to type-check
-                if f.stub_envs.is_some() {
-                    continue;
+            match &item.value {
+                Item::Function(f) => {
+                    self.check_func_body(f)?;
                 }
-                self.scopes.push(HashMap::new());
-                for param in &f.params {
-                    let ty = param
-                        .type_ann
-                        .as_ref()
-                        .map(|t| self.resolve_type_expr(t))
-                        .unwrap_or(Type::Infer);
-                    self.scopes.last_mut().unwrap().insert(param.name.clone(), ty);
+                Item::Class(c) => {
+                    for method in &c.methods {
+                        self.check_func_body(method)?;
+                    }
                 }
-
-                if let Some(_ret_type) = &f.return_type {
-                    // checked by resolution
-                }
-
-                let _ = self.check_block(&f.body);
-                self.scopes.pop();
+                _ => {}
             }
         }
 
@@ -128,6 +126,30 @@ impl TypeChecker {
         } else {
             Err(self.errors.remove(0))
         }
+    }
+
+    fn check_func_body(&mut self, f: &Function) -> Result<()> {
+        // Skip stub functions — no body to type-check
+        if f.stub_envs.is_some() {
+            return Ok(());
+        }
+        self.scopes.push(HashMap::new());
+        for param in &f.params {
+            let ty = param
+                .type_ann
+                .as_ref()
+                .map(|t| self.resolve_type_expr(t))
+                .unwrap_or(Type::Infer);
+            self.scopes.last_mut().unwrap().insert(param.name.clone(), ty);
+        }
+
+        if let Some(_ret_type) = &f.return_type {
+            // checked by resolution
+        }
+
+        let _ = self.check_block(&f.body);
+        self.scopes.pop();
+        Ok(())
     }
 
     fn infer_function_signature(&mut self, f: &Function) -> FunctionSignature {

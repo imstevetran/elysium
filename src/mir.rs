@@ -37,6 +37,7 @@ pub enum MirStmt {
         name: String,
         ty: MirType,
         is_mutable: bool,
+        is_lazy: bool,
         dbg_line: u32,
     },
     Store {
@@ -201,6 +202,7 @@ impl MirLowerer {
                 ty,
                 value,
                 is_mutable,
+                is_lazy,
                 is_only: _,
                 line: _,
             } => {
@@ -208,14 +210,18 @@ impl MirLowerer {
                     name: name.clone(),
                     ty: self.lower_type(ty),
                     is_mutable: *is_mutable,
+                    is_lazy: *is_lazy,
                     dbg_line: line,
                 });
+                // For non-lazy lets with a value, store immediately
                 if let Some(val) = value {
-                    stmts.push(MirStmt::Store {
-                        target: name.clone(),
-                        value: self.lower_expr(val),
-                        dbg_line: line,
-                    });
+                    if !is_lazy {
+                        stmts.push(MirStmt::Store {
+                            target: name.clone(),
+                            value: self.lower_expr(val),
+                            dbg_line: line,
+                        });
+                    }
                 }
             }
             HirStmt::Assign { target, value, line: _ } => {
@@ -289,6 +295,7 @@ impl MirLowerer {
                     name: variable.clone(),
                     ty: MirType::Int,
                     is_mutable: true,
+                    is_lazy: false,
                     dbg_line: line,
                 });
                 let iter_val = self.lower_expr(iterable);
@@ -410,6 +417,8 @@ mod tests {
                     first_line: 1,
                 },
                 is_async: false,
+                is_lazy: false,
+                is_private: false,
                 line: 1,
             })],
         };

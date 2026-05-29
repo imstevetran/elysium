@@ -23,6 +23,9 @@ impl<'a> Parser<'a> {
         let mut items = Vec::new();
         let mut top_stmts = Vec::new();
         while self.pos < self.tokens.len() {
+            // Check for modifiers (private, lazy) before items and statements
+            let is_mod = self.peek_is(&Token::Private) || self.peek_is(&Token::Lazy);
+
             if self.peek_is(&Token::Let)
                 || self.peek_is(&Token::Var)
                 || self.peek_is(&Token::Func)
@@ -34,19 +37,45 @@ impl<'a> Parser<'a> {
                 || self.peek_is(&Token::Import)
                 || self.peek_is(&Token::Spec)
                 || self.peek_is(&Token::Describe)
+                || is_mod
             {
-                // Check if we have a function/class/etc — these are items
-                if self.peek_is(&Token::Func) || self.peek_is(&Token::Async)
-                    || self.peek_is(&Token::Class) || self.peek_is(&Token::Enum)
-                    || self.peek_is(&Token::Component) || self.peek_is(&Token::Typealias)
-                    || self.peek_is(&Token::Import)
-                    || self.peek_is(&Token::Spec)
-                    || self.peek_is(&Token::Describe)
-                {
-                    items.push(self.parse_item()?);
+                // For modifiers, peek ahead to determine if this is a func item
+                if is_mod {
+                    let peek2 = if self.pos + 1 < self.tokens.len() {
+                        Some(&self.tokens[self.pos + 1].1)
+                    } else {
+                        None
+                    };
+                    let peek3 = if self.pos + 2 < self.tokens.len() {
+                        Some(&self.tokens[self.pos + 2].1)
+                    } else {
+                        None
+                    };
+                    // Modifier followed by func/async/class → item
+                    // Modifier followed by another modifier then func/async/class → item
+                    // Otherwise → stmt (private/lazy let/var)
+                    let is_func_item = matches!(peek2, Some(Token::Func | Token::Async | Token::Class))
+                        || (matches!(peek2, Some(Token::Private | Token::Lazy))
+                            && matches!(peek3, Some(Token::Func | Token::Async | Token::Class)));
+                    if is_func_item {
+                        items.push(self.parse_item()?);
+                    } else {
+                        top_stmts.push(self.parse_stmt()?);
+                    }
                 } else {
-                    // let/var at top level: collect into synthetic main
-                    top_stmts.push(self.parse_stmt()?);
+                    // Check if we have a function/class/etc — these are items
+                    if self.peek_is(&Token::Func) || self.peek_is(&Token::Async)
+                        || self.peek_is(&Token::Class) || self.peek_is(&Token::Enum)
+                        || self.peek_is(&Token::Component) || self.peek_is(&Token::Typealias)
+                        || self.peek_is(&Token::Import)
+                        || self.peek_is(&Token::Spec)
+                        || self.peek_is(&Token::Describe)
+                    {
+                        items.push(self.parse_item()?);
+                    } else {
+                        // let/var at top level: collect into synthetic main
+                        top_stmts.push(self.parse_stmt()?);
+                    }
                 }
             } else {
                 // Expression statement at top level
@@ -64,6 +93,8 @@ impl<'a> Parser<'a> {
                     return_type: None,
                     body: Block { statements: top_stmts },
                     is_async: false,
+                    is_private: false,
+                    is_lazy: false,
                     doc_comment: None,
                     bc_reason: None,
                     stub_envs: None,
@@ -79,9 +110,11 @@ impl<'a> Parser<'a> {
 
     fn parse_item(&mut self) -> Result<Node<Item>> {
         if self.peek_is(&Token::Func) {
-            self.parse_func_def()
+            self.parse_func_def(false, false)
         } else if self.peek_is(&Token::Async) {
-            self.parse_async_func_def()
+            self.parse_async_func_def(false, false)
+        } else if self.peek_is(&Token::Private) || self.peek_is(&Token::Lazy) {
+            self.parse_func_or_class_with_mods()
         } else if self.peek_is(&Token::Class) {
             self.parse_class_def()
         } else if self.peek_is(&Token::Enum) {
@@ -99,7 +132,34 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_func_def(&mut self) -> Result<Node<Item>> {
+    /// Parse optional `private` and `lazy` modifiers before a `func`, `async func`, or `class`.
+    fn parse_func_or_class_with_mods(&mut self) -> Result<Node<Item>> {
+        let mut is_private = false;
+        let mut is_lazy = false;
+        loop {
+            if self.peek_is(&Token::Private) && !is_private {
+                self.advance();
+                is_private = true;
+            } else if self.peek_is(&Token::Lazy) && !is_lazy {
+                self.advance();
+                is_lazy = true;
+            } else {
+                break;
+            }
+        }
+        if self.peek_is(&Token::Func) {
+            self.parse_func_def(is_private, is_lazy)
+        } else if self.peek_is(&Token::Async) {
+            self.parse_async_func_def(is_private, is_lazy)
+        } else if self.peek_is(&Token::Class) {
+            // private class (class-level access control noted but not enforced at runtime)
+            self.parse_class_def()
+        } else {
+            Err(self.error("expected function, async function, or class after modifier"))
+        }
+    }
+
+    fn parse_func_def(&mut self, is_private: bool, is_lazy: bool) -> Result<Node<Item>> {
         let start = self.advance_span_start(); // "func"
         let name = self.expect_identifier()?;
         self.expect(&Token::LParen)?;
@@ -116,6 +176,8 @@ impl<'a> Parser<'a> {
                 return_type,
                 body,
                 is_async: false,
+                is_private,
+                is_lazy,
                 doc_comment: None,
                 bc_reason,
                 stub_envs,
@@ -124,7 +186,7 @@ impl<'a> Parser<'a> {
         ))
     }
 
-    fn parse_async_func_def(&mut self) -> Result<Node<Item>> {
+    fn parse_async_func_def(&mut self, is_private: bool, is_lazy: bool) -> Result<Node<Item>> {
         let start = self.advance_span_start(); // "async"
         self.expect(&Token::Func)?;
         let name = self.expect_identifier()?;
@@ -141,6 +203,8 @@ impl<'a> Parser<'a> {
                 return_type,
                 body,
                 is_async: true,
+                is_private,
+                is_lazy,
                 doc_comment: None,
                 bc_reason: None,
                 stub_envs,
@@ -308,7 +372,16 @@ impl<'a> Parser<'a> {
         let mut fields = Vec::new();
         let mut methods = Vec::new();
         while !self.peek_is(&Token::RBrace) && self.pos < self.tokens.len() {
-            if self.peek_is(&Token::Func) {
+            // Check if this looks like a method (private/lazy/init/func) or a field (let/var/private-field)
+            let is_method_start = self.peek_is(&Token::Func)
+                || self.peek_is(&Token::Async)
+                || self.peek_is(&Token::Init);
+            let is_mod_before_method = (self.peek_is(&Token::Private) || self.peek_is(&Token::Lazy))
+                && {
+                    let p2 = if self.pos + 1 < self.tokens.len() { Some(&self.tokens[self.pos + 1].1) } else { None };
+                    matches!(p2, Some(Token::Func | Token::Async | Token::Init | Token::Private | Token::Lazy))
+                };
+            if is_method_start || is_mod_before_method {
                 if let Item::Function(f) = self.parse_func_in_class()?.value {
                     methods.push(f);
                 }
@@ -330,6 +403,12 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_class_field(&mut self) -> Result<ClassField> {
+        let is_private = if self.peek_is(&Token::Private) {
+            self.advance(); // "private"
+            true
+        } else {
+            false
+        };
         let is_mutable = if self.peek_is(&Token::Var) {
             self.advance(); // "var"
             true
@@ -347,12 +426,55 @@ impl<'a> Parser<'a> {
         Ok(ClassField {
             name,
             is_mutable,
+            is_private,
             type_ann,
         })
     }
 
     fn parse_func_in_class(&mut self) -> Result<Node<Item>> {
-        self.parse_func_def()
+        // Parse optional `private` and `lazy` modifiers
+        let mut is_private = false;
+        let mut is_lazy = false;
+        loop {
+            if self.peek_is(&Token::Private) && !is_private {
+                self.advance();
+                is_private = true;
+            } else if self.peek_is(&Token::Lazy) && !is_lazy {
+                self.advance();
+                is_lazy = true;
+            } else {
+                break;
+            }
+        }
+        // Parse optional `init` (constructor) or `async func` or plain `func`
+        if self.peek_is(&Token::Init) {
+            // `init` is sugar for a constructor method named after the class
+            // but we just keep it as "init" for now — the class context provides the name
+            self.advance(); // consume "init"
+            self.expect(&Token::LParen)?;
+            let params = self.parse_params()?;
+            self.expect(&Token::RParen)?;
+            let return_type = None; // init has no return type
+            let body = self.parse_block()?;
+            let (_, end) = self.last_span();
+            Ok(Node::new(
+                Item::Function(Function {
+                    name: "init".to_string(),
+                    params,
+                    return_type,
+                    body,
+                    is_async: false,
+                    is_private,
+                    is_lazy,
+                    doc_comment: None,
+                    bc_reason: None,
+                    stub_envs: None,
+                }),
+                crate::error::SourceSpan::new(0, end),
+            ))
+        } else {
+            self.parse_func_def(is_private, is_lazy)
+        }
     }
 
     // ==================== ENUMS ====================
@@ -567,9 +689,23 @@ impl<'a> Parser<'a> {
 
     fn parse_stmt(&mut self) -> Result<Node<Stmt>> {
         if self.peek_is(&Token::Let) {
-            self.parse_let_stmt()
+            self.parse_let_stmt(false, false)
         } else if self.peek_is(&Token::Var) {
-            self.parse_var_stmt()
+            self.parse_var_stmt(false)
+        } else if self.peek_is(&Token::Lazy) {
+            self.advance(); // "lazy"
+            if self.peek_is(&Token::Let) || self.peek_is(&Token::Var) {
+                self.parse_let_stmt(false, true)
+            } else {
+                Err(self.error("expected `let` or `var` after `lazy`"))
+            }
+        } else if self.peek_is(&Token::Private) {
+            self.advance(); // "private"
+            if self.peek_is(&Token::Let) || self.peek_is(&Token::Var) {
+                self.parse_let_stmt(true, false)
+            } else {
+                Err(self.error("expected `let` or `var` after `private`"))
+            }
         } else if self.peek_is(&Token::If) {
             self.parse_if_stmt()
         } else if self.peek_is(&Token::For) {
@@ -601,7 +737,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_let_stmt(&mut self) -> Result<Node<Stmt>> {
+    fn parse_let_stmt(&mut self, is_private: bool, is_lazy: bool) -> Result<Node<Stmt>> {
         let start = self.advance_span_start(); // "let"
         let is_only = false;
         let name = self.expect_identifier()?;
@@ -627,6 +763,8 @@ impl<'a> Parser<'a> {
                     value,
                     is_mutable: false,
                     is_only,
+                    is_private,
+                    is_lazy,
                     bc_reason,
                 },
                 crate::error::SourceSpan::new(start, end - start),
@@ -635,8 +773,9 @@ impl<'a> Parser<'a> {
         ))
     }
 
-    fn parse_var_stmt(&mut self) -> Result<Node<Stmt>> {
+    fn parse_var_stmt(&mut self, is_private: bool) -> Result<Node<Stmt>> {
         let start = self.advance_span_start(); // "var"
+        let is_only = false;
         let name = self.expect_identifier()?;
         let type_ann = if self.peek_is(&Token::Colon) {
             self.advance(); // ":"
@@ -658,7 +797,9 @@ impl<'a> Parser<'a> {
                     type_ann,
                     value,
                     is_mutable: true,
-                    is_only: false,
+                    is_only,
+                    is_private,
+                    is_lazy: false,
                     bc_reason: None,
                 },
                 crate::error::SourceSpan::new(start, end - start),
@@ -1469,6 +1610,8 @@ impl<'a> Parser<'a> {
             (Token::Bench, Token::Bench) => true,
             (Token::Bm, Token::Bm) => true,
             (Token::Stub, Token::Stub) => true,
+            (Token::Private, Token::Private) => true,
+            (Token::Lazy, Token::Lazy) => true,
             (Token::Assign, Token::Assign) => true,
             (Token::Plus, Token::Plus) => true,
             (Token::Minus, Token::Minus) => true,
@@ -1588,6 +1731,7 @@ impl<'a> Parser<'a> {
             | (Token::Todo, Token::Todo) | (Token::KwQuestion, Token::KwQuestion)
             | (Token::Bench, Token::Bench) | (Token::Bm, Token::Bm)
             | (Token::Stub, Token::Stub)
+            | (Token::Private, Token::Private) | (Token::Lazy, Token::Lazy)
             | (Token::Assign, Token::Assign) | (Token::Plus, Token::Plus)
             | (Token::Minus, Token::Minus) | (Token::Star, Token::Star)
             | (Token::Slash, Token::Slash) | (Token::Percent, Token::Percent)
@@ -1943,5 +2087,94 @@ mod tests {
         assert!(f.is_async);
         assert!(f.stub_envs.is_some());
         assert_eq!(f.stub_envs.as_ref().unwrap(), &vec!["prod".to_string()]);
+    }
+
+    // ----- Private / Lazy / Class -----
+
+    #[test]
+    fn test_parse_private_func() {
+        let prog = parse("private func foo() -> Int { return 42 }");
+        let f = match &prog.items[0].value {
+            Item::Function(f) => f,
+            _ => panic!("expected Function"),
+        };
+        assert_eq!(f.name, "foo");
+        assert!(f.is_private);
+    }
+
+    #[test]
+    fn test_parse_lazy_func() {
+        let prog = parse("lazy func bar() -> Int { return 1 }");
+        let f = match &prog.items[0].value {
+            Item::Function(f) => f,
+            _ => panic!("expected Function"),
+        };
+        assert_eq!(f.name, "bar");
+        assert!(f.is_lazy);
+    }
+
+    #[test]
+    fn test_parse_private_lazy_func() {
+        let prog = parse("private lazy func baz() -> Int { return 1 }");
+        let f = match &prog.items[0].value {
+            Item::Function(f) => f,
+            _ => panic!("expected Function"),
+        };
+        assert_eq!(f.name, "baz");
+        assert!(f.is_private);
+        assert!(f.is_lazy);
+    }
+
+    #[test]
+    fn test_parse_lazy_let() {
+        let mut p = Parser::new("lazy let x = 42");
+        let stmt = p.parse_stmt().expect("parse failed").value;
+        match &stmt {
+            Stmt::Let(ls) => {
+                assert!(ls.value.is_lazy);
+                assert_eq!(ls.value.name, "x");
+            }
+            _ => panic!("expected Let"),
+        }
+    }
+
+    #[test]
+    fn test_parse_private_let() {
+        let mut p = Parser::new("private let x = 42");
+        let stmt = p.parse_stmt().expect("parse failed").value;
+        match &stmt {
+            Stmt::Let(ls) => {
+                assert!(ls.value.is_private);
+                assert_eq!(ls.value.name, "x");
+            }
+            _ => panic!("expected Let"),
+        }
+    }
+
+    #[test]
+    fn test_parse_class_with_methods() {
+        let prog = parse("class Foo {\n\
+            let x: Int\n\
+            private let y: String\n\
+            func bar() -> Int { return x }\n\
+            private func baz() -> Bool { return true }\n\
+            init(x: Int) {}\n\
+        }");
+        let cls = match &prog.items[0].value {
+            Item::Class(c) => c,
+            _ => panic!("expected Class"),
+        };
+        assert_eq!(cls.name, "Foo");
+        assert_eq!(cls.fields.len(), 2);
+        assert_eq!(cls.fields[0].name, "x");
+        assert!(!cls.fields[0].is_private);
+        assert_eq!(cls.fields[1].name, "y");
+        assert!(cls.fields[1].is_private);
+        assert_eq!(cls.methods.len(), 3);
+        assert_eq!(cls.methods[0].name, "bar");
+        assert!(!cls.methods[0].is_private);
+        assert_eq!(cls.methods[1].name, "baz");
+        assert!(cls.methods[1].is_private);
+        assert_eq!(cls.methods[2].name, "init");
     }
 }

@@ -1,0 +1,37 @@
+/// Example demonstrating private, lazy, and class keywords
+
+private func helper() -> Int {
+    return 42
+}
+
+lazy func expensiveComputation() -> Int {
+    return helper() * 2
+}
+
+private lazy func cachedResult() -> String {
+    return "computed-lazy"
+}
+
+/// Class with private fields and methods
+class User {
+    let name: String
+    private let email: String
+
+    init(name: String, email: String) {
+        // ...
+    }
+
+    private func validate() -> Bool {
+        return true
+    }
+
+    func greet() -> String {
+        return "Hello, " + name
+    }
+}
+
+/// Lazy let variable (evaluated on first access)
+func demoLazy() -> Int {
+    lazy let x = expensiveComputation()
+    return x
+}

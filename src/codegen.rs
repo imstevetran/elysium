@@ -128,7 +128,7 @@ impl Codegen {
         }
 
         match stmt {
-            MirStmt::Alloca { name, ty, is_mutable: _, dbg_line: _ } => {
+            MirStmt::Alloca { name, ty, is_mutable: _, is_lazy: _, dbg_line: _ } => {
                 let llvm_ty = self.mir_type(ty);
                 builder.build_alloca(llvm_ty, name).expect("alloca");
             }

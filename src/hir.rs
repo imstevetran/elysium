@@ -20,6 +20,8 @@ pub struct HirFunction {
     pub return_type: HirType,
     pub body: HirBlock,
     pub is_async: bool,
+    pub is_lazy: bool,
+    pub is_private: bool,
     pub line: u32,
 }
 
@@ -44,6 +46,7 @@ pub enum HirStmt {
         value: Option<HirExpr>,
         is_mutable: bool,
         is_only: bool,
+        is_lazy: bool,
         line: u32,
     },
     Assign {
@@ -172,6 +175,12 @@ impl<'a> Lowerer<'a> {
                 A::Item::Function(f) => {
                     items.push(HirItem::Function(self.lower_function(f)));
                 }
+                A::Item::Class(c) => {
+                    // Lower class methods as standalone functions
+                    for method in &c.methods {
+                        items.push(HirItem::Function(self.lower_function(method)));
+                    }
+                }
                 _ => {}
             }
         }
@@ -192,6 +201,8 @@ impl<'a> Lowerer<'a> {
                 .unwrap_or(HirType::Nil),
             body: self.lower_block(&f.body),
             is_async: f.is_async,
+            is_lazy: f.is_lazy,
+            is_private: f.is_private,
             line,
         }
     }
@@ -256,6 +267,7 @@ impl<'a> Lowerer<'a> {
                 value: ls.value.as_ref().map(|v| self.lower_expr(v)),
                 is_mutable: ls.is_mutable,
                 is_only: ls.is_only,
+                is_lazy: ls.is_lazy,
                 line,
             }},
             A::Stmt::Expr(boxed) => HirStmt::Expr(self.lower_expr_from_node(boxed), line),

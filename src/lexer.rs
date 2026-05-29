@@ -97,6 +97,10 @@ pub enum Token {
     Bm,
     #[token("stub")]
     Stub,
+    #[token("private")]
+    Private,
+    #[token("lazy")]
+    Lazy,
 
     // Literals
     #[regex("[0-9]+", |lex| lex.slice().parse().ok())]

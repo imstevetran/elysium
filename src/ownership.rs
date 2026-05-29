@@ -11,12 +11,22 @@ impl OwnershipChecker {
 
     pub fn check_program(&mut self, program: &Program) -> Result<()> {
         for item in &program.items {
-            if let Item::Function(f) = &item.value {
-                // Skip stub functions — no body to check
-                if f.stub_envs.is_some() {
-                    continue;
+            match &item.value {
+                Item::Function(f) => {
+                    if f.stub_envs.is_some() {
+                        continue;
+                    }
+                    self.check_block(&f.body)?;
                 }
-                self.check_block(&f.body)?;
+                Item::Class(c) => {
+                    for method in &c.methods {
+                        if method.stub_envs.is_some() {
+                            continue;
+                        }
+                        self.check_block(&method.body)?;
+                    }
+                }
+                _ => {}
             }
         }
         Ok(())

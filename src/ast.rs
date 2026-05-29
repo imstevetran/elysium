@@ -38,6 +38,8 @@ pub struct Function {
     pub return_type: Option<TypeExpr>,
     pub body: Block,
     pub is_async: bool,
+    pub is_private: bool,
+    pub is_lazy: bool,
     pub doc_comment: Option<String>,
     pub bc_reason: Option<String>,
     pub stub_envs: Option<Vec<String>>,
@@ -62,6 +64,7 @@ pub struct Class {
 pub struct ClassField {
     pub name: String,
     pub is_mutable: bool,
+    pub is_private: bool,
     pub type_ann: Option<TypeExpr>,
 }
 
@@ -138,6 +141,8 @@ pub struct Let {
     pub value: Option<Expr>,
     pub is_mutable: bool,
     pub is_only: bool,
+    pub is_private: bool,
+    pub is_lazy: bool,
     pub bc_reason: Option<String>,
 }
 

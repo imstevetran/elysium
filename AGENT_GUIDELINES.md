@@ -11,6 +11,22 @@
 
 The `question` keyword was chosen over `oq` or `concern` because it's the most intuitive plain-English word. Since `?` already uses `Token::Question` in the lexer, the keyword token is `Token::KwQuestion`.
 
+### Private, Lazy, and Class Keywords
+- `private` — access modifier for functions, class fields, and class methods
+- `lazy` — modifier for functions and let variables (deferred/lazy evaluation)
+- `init` — constructor method within a class body
+- `class` — struct-like class definition with fields and methods
+- Syntax:
+  - `private func foo()` — private top-level function
+  - `lazy func foo()` — lazy function (evaluated on first call)
+  - `private lazy func foo()` — both modifiers
+  - `lazy let x = expr` — lazy variable (evaluated on first access)
+  - `class Foo { let x: Int; private let y: String; func bar() {}; private func baz() {} }`
+  - `init(x: Int) {}` — constructor method inside a class
+- Pipeline: class methods are lowered as standalone functions in HIR
+- Lazy let uses `is_lazy: bool` on `HirStmt::Let` and `MirStmt::Alloca`; store is deferred to first access
+- Private is tracked on `Function.is_private`, `ClassField.is_private`, and `Let.is_private`; type checker uses it for access control
+
 ### Import System
 - `import "./path.ely"` — basic import (items are inlined)
 - `import "./path.ely" as alias` — aliased import (desugars `alias.fn()` → `alias_fn()`)
