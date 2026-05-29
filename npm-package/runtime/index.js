@@ -17,6 +17,7 @@ const ui = require('./ui');
 const consoleMod = require('./console');
 const fsMod = require('./fs');
 const transportMod = require('./transport');
+const stringMod = require('./string');
 
 module.exports = {
   // ARC
@@ -47,4 +48,7 @@ module.exports = {
 
   // Transport (HTTP, WebSocket, MQTT)
   transport: transportMod,
+
+  // String utilities
+  string: stringMod,
 };

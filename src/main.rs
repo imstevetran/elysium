@@ -626,6 +626,7 @@ fn desugar_builtin_in_expr(expr: &mut ast::Expr) {
                     "console" => "__console_",
                     "fs" => "__fs_",
                     "transport" => "__transport_",
+                    "string" => "__string_",
                     _ => "",
                 };
                 if !prefix.is_empty() {
@@ -639,6 +640,21 @@ fn desugar_builtin_in_expr(expr: &mut ast::Expr) {
                     };
                     return;
                 }
+            }
+            // Check if this is a string-literal method call: "hello".length() → __string_length("hello")
+            // Also handles identifier receivers: x.length() → __string_length(x)
+            if is_string_method(method) {
+                let aliased_name = format!("__string_{}", method);
+                let new_callee = ast::Expr::Identifier(aliased_name);
+                // Prepend the receiver object as the first argument (clone since we can't move out of &mut)
+                let mut new_args: Vec<ast::Node<ast::Expr>> = Vec::new();
+                new_args.push(ast::Node::new(object.value.clone(), object.span.clone()));
+                std::mem::swap(args, &mut new_args);
+                *expr = ast::Expr::Call {
+                    callee: Box::new(ast::Node::new(new_callee, object.span.clone())),
+                    args: new_args,
+                };
+                return;
             }
             desugar_builtin_in_expr(&mut object.value);
             for arg in args {
@@ -701,6 +717,19 @@ fn desugar_builtin_in_expr(expr: &mut ast::Expr) {
             }
         }
     }
+}
+
+/// Returns true if the method name is a recognized string method.
+fn is_string_method(method: &str) -> bool {
+    matches!(
+        method,
+        "length" | "isEmpty" | "startsWith" | "endsWith" | "contains"
+            | "toUpper" | "toLower" | "trim" | "trimStart" | "trimEnd"
+            | "charAt" | "charCodeAt" | "indexOf" | "lastIndexOf"
+            | "slice" | "substring" | "replace" | "split"
+            | "padStart" | "padEnd" | "repeat" | "concat"
+            | "includes" | "search" | "match" | "toString"
+    )
 }
 
 fn filter_stubs_raw(mut program: ast::Program, env: &str) -> ast::Program {

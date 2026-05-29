@@ -124,6 +124,7 @@ impl Codegen {
             MirStmt::ConsoleCall { dbg_line, .. } => *dbg_line,
             MirStmt::FsCall { dbg_line, .. } => *dbg_line,
             MirStmt::TransportCall { dbg_line, .. } => *dbg_line,
+            MirStmt::StringCall { dbg_line, .. } => *dbg_line,
             _ => func.dbg_line,
         };
 
@@ -156,6 +157,9 @@ impl Codegen {
             }
             MirStmt::TransportCall { result, method, args, dbg_line: _ } => {
                 self.emit_transport_call(result, method, args, builder)?;
+            }
+            MirStmt::StringCall { result, method, args, dbg_line: _ } => {
+                self.emit_string_call(result, method, args, builder)?;
             }
             _ => {}
         }
@@ -596,6 +600,73 @@ impl Codegen {
         let fmt = builder.build_global_string_ptr(&msg, "__transport_fmt").expect("fmt");
         let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__transport_printf")
             .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+        Ok(())
+    }
+
+    /// Emit a string operation call.
+    /// For `length`, uses C `strlen`. For everything else, emits a runtime stub
+    /// since C codegen can't allocate/manipulate strings easily.
+    fn emit_string_call(
+        &self,
+        result: &Option<String>,
+        method: &str,
+        args: &[MirValue],
+        builder: &inkwell::builder::Builder<'static>,
+    ) -> Result<()> {
+        let i32_ty = self.context.i32_type();
+        let i64_ty = self.context.i64_type();
+        let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::default());
+
+        // Helper: get the string receiver as an i8* from the first arg
+        let str_arg = args.first().and_then(|a| self.mir_value_as_cstr_ptr(a, builder));
+
+        match method {
+            "length" => {
+                if let Some(s) = str_arg {
+                    let strlen_ty = i64_ty.fn_type(&[ptr_ty.into()], false);
+                    let strlen_fn = self.module.add_function("strlen", strlen_ty, None);
+                    let len_val = builder.build_call(strlen_fn, &[s.into()], "__strlen_call")
+                        .map_err(|e| crate::error::CompileError::new(format!("strlen: {}", e)))?
+                        .as_any_value_enum()
+                        .into_int_value();
+                    if let Some(dest) = result {
+                        let dest_alloca = builder.build_alloca(i64_ty, &format!("__str_result_{}", dest))
+                            .expect("str result alloca");
+                        builder.build_store(dest_alloca, len_val)
+                            .map_err(|e| crate::error::CompileError::new(format!("store strlen: {}", e)))?;
+                    }
+                }
+            }
+            "isEmpty" => {
+                if let Some(s) = str_arg {
+                    let strlen_ty = i64_ty.fn_type(&[ptr_ty.into()], false);
+                    let strlen_fn = self.module.add_function("strlen", strlen_ty, None);
+                    let len_val = builder.build_call(strlen_fn, &[s.into()], "__strlen_call")
+                        .map_err(|e| crate::error::CompileError::new(format!("strlen: {}", e)))?
+                        .as_any_value_enum()
+                        .into_int_value();
+                    let zero = i64_ty.const_zero();
+                    let is_empty = builder.build_int_compare(
+                        inkwell::IntPredicate::EQ, len_val, zero, "__str_is_empty",
+                    ).map_err(|e| crate::error::CompileError::new(format!("icmp: {}", e)))?;
+                    if let Some(dest) = result {
+                        let bool_ty = self.context.bool_type();
+                        let dest_alloca = builder.build_alloca(bool_ty, &format!("__str_result_{}", dest))
+                            .expect("str result alloca");
+                        builder.build_store(dest_alloca, is_empty)
+                            .map_err(|e| crate::error::CompileError::new(format!("store is_empty: {}", e)))?;
+                    }
+                }
+            }
+            _ => {
+                let printf_ty = i32_ty.fn_type(&[ptr_ty.into()], true);
+                let printf_fn = self.module.add_function("printf", printf_ty, None);
+                let msg = format!("[string] {}: use JS runtime\n", method);
+                let fmt = builder.build_global_string_ptr(&msg, "__str_fmt").expect("fmt");
+                let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__str_printf")
+                    .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+            }
+        }
         Ok(())
     }
 }

@@ -182,6 +182,75 @@ impl TypeChecker {
                 );
             }
         }
+        // string.* builtins (desugared from string.length(x) or x.length())
+        // First arg is always the string receiver.
+        {
+            // String → Int
+            let int_sigs: &[(&str, Vec<Type>)] = &[
+                ("__string_length", vec![Type::String]),
+                ("__string_charCodeAt", vec![Type::String, Type::Int]),
+                ("__string_indexOf", vec![Type::String, Type::String]),
+                ("__string_lastIndexOf", vec![Type::String, Type::String]),
+                ("__string_search", vec![Type::String, Type::String]),
+            ];
+            for (name, param_types) in int_sigs {
+                self.functions.insert(
+                    name.to_string(),
+                    FunctionSignature {
+                        param_types: param_types.clone(),
+                        return_type: Box::new(Type::Int),
+                        is_async: false,
+                    },
+                );
+            }
+            // String → Bool
+            let bool_sigs: &[(&str, Vec<Type>)] = &[
+                ("__string_isEmpty", vec![Type::String]),
+                ("__string_startsWith", vec![Type::String, Type::String]),
+                ("__string_endsWith", vec![Type::String, Type::String]),
+                ("__string_contains", vec![Type::String, Type::String]),
+                ("__string_includes", vec![Type::String, Type::String]),
+            ];
+            for (name, param_types) in bool_sigs {
+                self.functions.insert(
+                    name.to_string(),
+                    FunctionSignature {
+                        param_types: param_types.clone(),
+                        return_type: Box::new(Type::Bool),
+                        is_async: false,
+                    },
+                );
+            }
+            // String → String
+            let string_sigs: &[(&str, Vec<Type>)] = &[
+                ("__string_toUpper", vec![Type::String]),
+                ("__string_toLower", vec![Type::String]),
+                ("__string_trim", vec![Type::String]),
+                ("__string_trimStart", vec![Type::String]),
+                ("__string_trimEnd", vec![Type::String]),
+                ("__string_toString", vec![Type::String]),
+                ("__string_charAt", vec![Type::String, Type::Int]),
+                ("__string_slice", vec![Type::String, Type::Int, Type::Int]),
+                ("__string_substring", vec![Type::String, Type::Int, Type::Int]),
+                ("__string_replace", vec![Type::String, Type::String, Type::String]),
+                ("__string_concat", vec![Type::String, Type::String]),
+                ("__string_padStart", vec![Type::String, Type::Int, Type::String]),
+                ("__string_padEnd", vec![Type::String, Type::Int, Type::String]),
+                ("__string_repeat", vec![Type::String, Type::Int]),
+                ("__string_split", vec![Type::String, Type::String]),
+                ("__string_match", vec![Type::String, Type::String]),
+            ];
+            for (name, param_types) in string_sigs {
+                self.functions.insert(
+                    name.to_string(),
+                    FunctionSignature {
+                        param_types: param_types.clone(),
+                        return_type: Box::new(Type::String),
+                        is_async: false,
+                    },
+                );
+            }
+        }
         self.functions.insert(
             "sum".into(),
             FunctionSignature {

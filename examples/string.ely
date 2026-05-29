@@ -1,0 +1,19 @@
+// Test string operations — both via namespace and via string-literal method calls
+// The desugaring converts both into __string_* calls
+
+func main() {
+    // String namespace: string.length(x)
+    let len1 = string.length("hello")
+    let len2 = "hello".length()
+    let isEmpty = "".isEmpty()
+    let upper = "hello".toUpper()
+    let lower = "HELLO".toLower()
+    let trimmed = "  hi  ".trim()
+    let replaced = "hello world".replace("world", "there")
+    let sliced = "hello".slice(1, 4)
+    let parts = "a,b,c".split(",")
+    let hasHello = "hello world".contains("hello")
+    let starts = "hello".startsWith("he")
+
+    print("string operations completed\n")
+}

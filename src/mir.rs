@@ -89,6 +89,14 @@ pub enum MirStmt {
         args: Vec<MirValue>,
         dbg_line: u32,
     },
+    /// String operation call (length, toUpper, trim, etc.).
+    /// When `result` is Some(name), the return value is stored into that alloca.
+    StringCall {
+        result: Option<String>,
+        method: String,
+        args: Vec<MirValue>,
+        dbg_line: u32,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -261,6 +269,17 @@ impl MirLowerer {
                                     });
                                     return;
                                 }
+                                if cname.starts_with("__string_") {
+                                    let method = cname.strip_prefix("__string_").unwrap_or(cname).to_string();
+                                    let mir_args: Vec<MirValue> = args.iter().map(|a| self.lower_expr(a)).collect();
+                                    stmts.push(MirStmt::StringCall {
+                                        result: Some(name.clone()),
+                                        method,
+                                        args: mir_args,
+                                        dbg_line: line,
+                                    });
+                                    return;
+                                }
                             }
                         }
                         stmts.push(MirStmt::Store {
@@ -309,6 +328,17 @@ impl MirLowerer {
                             let method = name.strip_prefix("__transport_").unwrap_or(name).to_string();
                             let mir_args: Vec<MirValue> = args.iter().map(|a| self.lower_expr(a)).collect();
                             stmts.push(MirStmt::TransportCall {
+                                result: None,
+                                method,
+                                args: mir_args,
+                                dbg_line: line,
+                            });
+                            return;
+                        }
+                        if name.starts_with("__string_") {
+                            let method = name.strip_prefix("__string_").unwrap_or(name).to_string();
+                            let mir_args: Vec<MirValue> = args.iter().map(|a| self.lower_expr(a)).collect();
+                            stmts.push(MirStmt::StringCall {
                                 result: None,
                                 method,
                                 args: mir_args,

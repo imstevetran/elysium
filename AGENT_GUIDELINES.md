@@ -160,3 +160,23 @@ The `question` keyword was chosen over `oq` or `concern` because it's the most i
   - **MQTT** via `mqttConnect`, `mqttPublish`, `mqttSubscribe`, `mqttDisconnect` using `mqtt` package (Node-only)
   - **Status codes** via `transport.status.OK`, `status.NOT_FOUND`, etc.
 - Exported via `require('elysium-lang').transport`
+
+### String Package (added May 2026)
+- String utility operations via `string.length(x)` or `"hello".length()` method-call syntax
+- Two desugaring paths in `main.rs` (`desugar_builtin_calls`):
+  - **Namespace**: `string.method(...)` → `__string_method(...)` (same pattern as fs/transport)
+  - **Method call on any value**: `x.length()`, `"hello".toUpper()` → `__string_method(receiver, ...)`
+    - The receiver is cloned and prepended as the first argument
+    - Recognized by `is_string_method()` — supports 25+ string methods
+- Type checker registers `__string_*` builtins:
+  - `(String) → Int`: `length`, `charCodeAt`, `indexOf`, `lastIndexOf`, `search`
+  - `(String) → Bool`: `isEmpty`, `startsWith`, `endsWith`, `contains`, `includes`
+  - `(String) → String`: `toUpper`, `toLower`, `trim`, `trimStart`, `trimEnd`, `toString`,
+    `charAt`, `slice`, `substring`, `replace`, `concat`, `padStart`, `padEnd`, `repeat`, `split`, `match`
+- MIR: Uses `MirStmt::StringCall { result, method, args, dbg_line }` for both void and return-value contexts
+- Codegen (`emit_string_call`):
+  - `length`: uses C `strlen`, stores result as i64
+  - `isEmpty`: uses C `strlen`, compares to zero, stores result as bool
+  - All other methods: prints stub `[string] method: use JS runtime\n`
+- JS runtime `npm-package/runtime/string.js` maps every method to native JavaScript `String.prototype`
+- Exported via `require('elysium-lang').string`
