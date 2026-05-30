@@ -1,0 +1,328 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Elysium",
+  "scopeName": "source.elysium",
+  "fileTypes": ["ely", "elyx"],
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#numbers" },
+    { "include": "#function-definition" },
+    { "include": "#class-definition" },
+    { "include": "#component-definition" },
+    { "include": "#enum-definition" },
+    { "include": "#typealias-definition" },
+    { "include": "#import-statement" },
+    { "include": "#keywords" },
+    { "include": "#types" },
+    { "include": "#builtins"},
+    { "include": "#xml-tags" },
+    { "include": "#operators" },
+    { "include": "#punctuation" },
+    { "include": "#variables" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.documentation.elysium",
+          "begin": "///",
+          "end": "$",
+          "beginCaptures": {
+            "0": { "name": "punctuation.definition.comment.elysium" }
+          }
+        },
+        {
+          "name": "comment.line.double-slash.elysium",
+          "begin": "//",
+          "end": "$",
+          "beginCaptures": {
+            "0": { "name": "punctuation.definition.comment.elysium" }
+          }
+        },
+        {
+          "name": "comment.block.elysium",
+          "begin": "/\\*",
+          "end": "\\*/",
+          "beginCaptures": {
+            "0": { "name": "punctuation.definition.comment.begin.elysium" }
+          },
+          "endCaptures": {
+            "0": { "name": "punctuation.definition.comment.end.elysium" }
+          }
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.elysium",
+          "begin": "\"",
+          "end": "\"",
+          "beginCaptures": {
+            "0": { "name": "punctuation.definition.string.begin.elysium" }
+          },
+          "endCaptures": {
+            "0": { "name": "punctuation.definition.string.end.elysium" }
+          },
+          "patterns": [
+            {
+              "name": "constant.character.escape.elysium",
+              "match": "\\\\[nrt0\"'\\\\]"
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.single.elysium",
+          "begin": "'",
+          "end": "'",
+          "beginCaptures": {
+            "0": { "name": "punctuation.definition.string.begin.elysium" }
+          },
+          "endCaptures": {
+            "0": { "name": "punctuation.definition.string.end.elysium" }
+          }
+        },
+        {
+          "name": "string.quoted.backtick.elysium",
+          "begin": "`",
+          "end": "`",
+          "beginCaptures": {
+            "0": { "name": "punctuation.definition.string.begin.elysium" }
+          },
+          "endCaptures": {
+            "0": { "name": "punctuation.definition.string.end.elysium" }
+          }
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.float.elysium",
+          "match": "\\b[0-9]+\\.[0-9]+\\b"
+        },
+        {
+          "name": "constant.numeric.integer.elysium",
+          "match": "\\b[0-9]+\\b"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "constant.language.elysium",
+          "match": "\\b(?:true|false|nil)\\b"
+        },
+        {
+          "name": "keyword.control.elysium",
+          "match": "\\b(?:if|else|then|for|in|while|return|match|case|switch|try|catch|finally|do|async|await)\\b"
+        },
+        {
+          "name": "keyword.declaration.elysium",
+          "match": "\\b(?:let|var|func|class|init|enum|component|state|render|import|as|typealias|private|lazy|stub|worker|schedule)\\b"
+        },
+        {
+          "name": "keyword.other.elysium",
+          "match": "\\b(?:bc|because|only|unsafe|weak|unowned|spec|describe|feat|it|expect|todo|question|bench|bm|parallel|wait|is)\\b"
+        }
+      ]
+    },
+    "types": {
+      "name": "storage.type.elysium",
+      "match": "\\b(?:Int|Float|Bool|String|Char|Nil|Option|Result|Array|Dict|Self|int|float|bool|string|char|nil|option|result|array|dict)\\b"
+    },
+    "builtins": {
+      "name": "support.function.builtin.elysium",
+      "match": "\\b(?:print|sum|min|max|abs|len|count|isEmpty|map|filter|reduce|toString|toInt|toFloat|toBool|typeName|parseInt|parseFloat)\\b"
+    },
+    "function-definition": {
+      "name": "meta.function.elysium",
+      "match": "\\b(func)\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(",
+      "captures": {
+        "1": { "name": "keyword.declaration.elysium" },
+        "2": {
+          "name": "entity.name.function.elysium",
+          "patterns": [
+            { "include": "#punctuation" }
+          ]
+        }
+      }
+    },
+    "class-definition": {
+      "name": "meta.class.elysium",
+      "match": "\\b(class)\\s+([a-zA-Z_][a-zA-Z0-9_]*)",
+      "captures": {
+        "1": { "name": "keyword.declaration.elysium" },
+        "2": { "name": "entity.name.type.class.elysium" }
+      }
+    },
+    "component-definition": {
+      "name": "meta.component.elysium",
+      "match": "\\b(component)\\s+([a-zA-Z_][a-zA-Z0-9_]*)",
+      "captures": {
+        "1": { "name": "keyword.declaration.elysium" },
+        "2": { "name": "entity.name.type.class.elysium" }
+      }
+    },
+    "enum-definition": {
+      "name": "meta.enum.elysium",
+      "match": "\\b(enum)\\s+([a-zA-Z_][a-zA-Z0-9_]*)",
+      "captures": {
+        "1": { "name": "keyword.declaration.elysium" },
+        "2": { "name": "entity.name.type.enum.elysium" }
+      }
+    },
+    "typealias-definition": {
+      "name": "meta.typealias.elysium",
+      "match": "\\b(typealias)\\s+([a-zA-Z_][a-zA-Z0-9_]*)",
+      "captures": {
+        "1": { "name": "keyword.declaration.elysium" },
+        "2": { "name": "entity.name.type.elysium" }
+      }
+    },
+    "import-statement": {
+      "name": "meta.import.elysium",
+      "begin": "\\b(import)\\s+",
+      "end": "$",
+      "beginCaptures": {
+        "1": { "name": "keyword.declaration.elysium" }
+      },
+      "patterns": [
+        { "include": "#strings" },
+        {
+          "name": "keyword.declaration.elysium",
+          "match": "\\b(as)\\b"
+        },
+        {
+          "name": "variable.other.elysium",
+          "match": "[a-zA-Z_][a-zA-Z0-9_]*"
+        }
+      ]
+    },
+    "xml-tags": {
+      "patterns": [
+        {
+          "name": "meta.tag.elysium",
+          "begin": "(<)([a-zA-Z][a-zA-Z0-9_.-]*)(?=\\s|/?>)",
+          "end": "(/?)>",
+          "beginCaptures": {
+            "1": { "name": "punctuation.definition.tag.elysium" },
+            "2": { "name": "entity.name.tag.elysium" }
+          },
+          "endCaptures": {
+            "0": { "name": "punctuation.definition.tag.elysium" },
+            "1": { "name": "punctuation.definition.tag.elysium" }
+          },
+          "patterns": [
+            {
+              "name": "string.quoted.double.elysium",
+              "begin": "\"",
+              "end": "\"",
+              "beginCaptures": {
+                "0": { "name": "punctuation.definition.string.begin.elysium" }
+              },
+              "endCaptures": {
+                "0": { "name": "punctuation.definition.string.end.elysium" }
+              },
+              "patterns": [
+                {
+                  "name": "constant.character.escape.elysium",
+                  "match": "\\\\[nrt0\"'\\\\]"
+                }
+              ]
+            },
+            {
+              "name": "string.quoted.single.elysium",
+              "begin": "'",
+              "end": "'",
+              "beginCaptures": {
+                "0": { "name": "punctuation.definition.string.begin.elysium" }
+              },
+              "endCaptures": {
+                "0": { "name": "punctuation.definition.string.end.elysium" }
+              }
+            },
+            {
+              "name": "meta.expression.elysium",
+              "begin": "\\{",
+              "end": "\\}",
+              "beginCaptures": {
+                "0": { "name": "punctuation.section.block.begin.elysium" }
+              },
+              "endCaptures": {
+                "0": { "name": "punctuation.section.block.end.elysium" }
+              },
+              "patterns": [
+                { "include": "#strings" },
+                { "include": "#numbers" },
+                { "include": "#keywords" },
+                { "include": "#types" },
+                { "include": "#builtins" },
+                { "include": "#operators" },
+                { "include": "#punctuation" },
+                { "include": "#variables" }
+              ]
+            },
+            {
+              "name": "entity.other.attribute-name.elysium",
+              "match": "[a-zA-Z_][a-zA-Z0-9_]*"
+            },
+            {
+              "name": "keyword.operator.assignment.elysium",
+              "match": "="
+            }
+          ]
+        },
+        {
+          "name": "meta.tag.elysium",
+          "match": "(</)([a-zA-Z][a-zA-Z0-9_.-]*)(>)",
+          "captures": {
+            "1": { "name": "punctuation.definition.tag.elysium" },
+            "2": { "name": "entity.name.tag.elysium" },
+            "3": { "name": "punctuation.definition.tag.elysium" }
+          }
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        { "name": "keyword.operator.arrow.elysium", "match": "->|<-" },
+        { "name": "keyword.operator.ellipsis.elysium", "match": "\\.\\.\\.|…" },
+        { "name": "keyword.operator.range.elysium", "match": "\\.\\." },
+        { "name": "keyword.operator.comparison.elysium", "match": "==|!=|<=|>=|<|>" },
+        { "name": "keyword.operator.arithmetic.elysium", "match": "[+\\-*/%]" },
+        { "name": "keyword.operator.logical.elysium", "match": "&&|\\|\\||!" },
+        { "name": "keyword.operator.assignment.elysium", "match": "=" }
+      ]
+    },
+    "punctuation": {
+      "patterns": [
+        { "name": "punctuation.separator.period.elysium", "match": "\\." },
+        { "name": "punctuation.separator.comma.elysium", "match": "," },
+        { "name": "punctuation.separator.colon.elysium", "match": ":" },
+        { "name": "punctuation.terminator.semicolon.elysium", "match": ";" },
+        { "name": "punctuation.section.parens.begin.elysium", "match": "\\(" },
+        { "name": "punctuation.section.parens.end.elysium", "match": "\\)" },
+        { "name": "punctuation.section.bracket.begin.elysium", "match": "\\[" },
+        { "name": "punctuation.section.bracket.end.elysium", "match": "\\]" },
+        { "name": "punctuation.section.block.begin.elysium", "match": "\\{" },
+        { "name": "punctuation.section.block.end.elysium", "match": "\\}" },
+        { "name": "punctuation.separator.pipe.elysium", "match": "\\|" },
+        { "name": "keyword.operator.ternary.elysium", "match": "\\?" }
+      ]
+    },
+    "variables": {
+      "patterns": [
+        {
+          "name": "variable.language.wildcard.elysium",
+          "match": "\\b_\\b"
+        },
+        {
+          "name": "variable.other.elysium",
+          "match": "[a-zA-Z_][a-zA-Z0-9_]*"
+        }
+      ]
+    }
+  }
+}

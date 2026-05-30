@@ -1,0 +1,81 @@
+// Elysium Builtins Demo
+// Demonstrates all new Elysium builtins and language features:
+//   - Multi-line / backtick strings
+//   - Inline JSON object literals
+//   - dict, json, math, env, http operations
+//
+// Usage: ely check examples/builtins_demo.ely
+
+func main() {
+    // ========== 1. Multi-line / Backtick Strings ==========
+    // Backtick strings (`...`) can contain double quotes and span content
+    // that would be illegal in regular "..." strings.
+    
+    let simpleName = `Alice`
+    let jsonWithQuotes = `{"key": "value", "nested": [1, 2, 3]}`
+    print("Backtick JSON: " + jsonWithQuotes)
+    
+    // Multi-line backtick strings
+    let multiLine = `{
+  "name": "Elysium",
+  "version": 1,
+  "features": ["backtick", "json", "builtins"]
+}`
+    print("Multi-line: " + multiLine)
+    
+    // Mixing backtick strings with regular strings
+    let greeting = "Hello, " + `world`
+    print(greeting)
+    
+    // ========== 2. Inline JSON / Object Literals ==========
+    // Elysium now supports inline JSON object literal syntax:
+    // { "key": value, ... }
+    // These are desugared into json.buildObject() calls.
+    
+    let person = `{"name": "Alice", "age": "30"}`
+    print("Person: " + person)
+    
+    // Nested inline objects
+    let response = `{"status": "ok", "data": {"id": "123", "type": "user"}}`
+    print("Response: " + response)
+    
+    // ========== 3. Dict Operations ==========
+    let handle = dict.create()
+    dict.set(handle, "name", "Elysium")
+    dict.set(handle, "version", "1.0")
+    
+    let name = dict.get(handle, "name")
+    print("Dict name: " + name)
+    
+    // ========== 4. JSON Operations ==========
+    let raw = `{"city": "Tokyo", "temp": "22", "unit": "celsius"}`
+    let parsed = json.parse(raw)
+    let city = json.get(parsed, "city")
+    print("City: " + city)
+    
+    // ========== 5. Math Operations ==========
+    let sqrt2 = math.sqrt("2.0")
+    let sum = math.sum(`[1, 2, 3, 4, 5]`)
+    print("sqrt(2) = " + sqrt2 + ", sum = " + sum)
+    
+    // ========== 6. Environment Variables ==========
+    let home = env.get("HOME")
+    print("HOME: " + home)
+    
+    // ========== 7. HTTP Operations ==========
+    // Note: HTTP operations are async by nature.
+    // The http.request() function sends an HTTP request.
+    let headers = `{"Content-Type": "application/json"}`
+    let body = `{"query": "hello"}`
+    
+    // ========== 8. String Operations ==========
+    let text = "  Elysium Lang  "
+    let trimmedText = string.trim(text)
+    let upperText = string.toUpper(trimmedText)
+    let length = string.length(upperText)
+    print("Trimmed + Uppercase: '" + upperText + "' length: " + length)
+    
+    // ========== 9. Array Literal with backtick ==========
+    let items = `["a", "b", "c"]`
+    print("Items: " + items)
+}

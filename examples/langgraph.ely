@@ -1,0 +1,58 @@
+/// Summary: LangGraph-style stateful graph-based agent orchestration in pure Elysium.
+/// Imports the langgraph package from the EPM registry.
+import "#/langgraph" as langgraph
+
+func main() {
+    // Create a new state graph registry
+    let registry = langgraph.createRegistry()
+    print("registry: " + registry + "\n")
+
+    // Create a new state graph
+    let gid = langgraph.graph(registry, "simple_agent")
+    print(gid + "\n")
+
+    // Add nodes to the graph
+    let gid2 = langgraph.addNode(registry, gid, "input_node", "function node")
+    print("nodes added: " + gid2 + "\n")
+
+    // Add edges between nodes
+    let gid3 = langgraph.addEdge(registry, gid, "input_node", "output_node")
+    print("edge added: " + gid3 + "\n")
+
+    // Compile the graph
+    let compiled = langgraph.compile(registry, gid)
+    print("compiled: " + compiled + "\n")
+
+    // Update graph state
+    let gid4 = langgraph.updateState(registry, gid, "active")
+    print("state updated: " + gid4 + "\n")
+
+    // Get current state
+    let snap = langgraph.getState(registry, gid)
+    print("snapshot: " + snap + "\n")
+
+    // Invoke the graph with initial state
+    let result = langgraph.invoke(registry, gid, "idle")
+    print("result: " + result + "\n")
+
+    // Stream execution (get intermediate states)
+    let streamed = langgraph.stream(registry, gid, "idle")
+    print("streamed: " + streamed + "\n")
+
+    // Add conditional edges (branching)
+    let gid5 = langgraph.addConditionalEdges(registry, gid, "input_node", "route", "continue, end")
+    print("conditional edges: " + gid5 + "\n")
+
+    // Add parallel branching
+    let gid6 = langgraph.branch(registry, gid, "parallel tasks")
+    print("branch added: " + gid6 + "\n")
+
+    // Interrupt and resume
+    let gid7 = langgraph.interrupt(registry, gid, "human review needed")
+    print("interrupted: " + gid7 + "\n")
+
+    let resumed = langgraph.resume(registry, gid)
+    print("resumed: " + resumed + "\n")
+
+    print("langgraph operations completed\n")
+}

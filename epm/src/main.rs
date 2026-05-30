@@ -141,6 +141,11 @@ fn cmd_install(
             for (i, dep) in resolution.tree.iter().enumerate() {
                 println!("[{}/{}] Installing {}@{} ...", i + 1, total, dep.name, dep.version);
                 let target_dir = deps_dir.join(&dep.name);
+                // Ensure parent exists for scoped packages (e.g. @org/)
+                if let Some(parent) = target_dir.parent() {
+                    std::fs::create_dir_all(parent)
+                        .map_err(|e| format!("Cannot create directory {}: {}", parent.display(), e))?;
+                }
                 if target_dir.exists() {
                     // Remove existing to reinstall correct version
                     std::fs::remove_dir_all(&target_dir)
@@ -170,6 +175,11 @@ fn cmd_install(
                 .map_err(|e| format!("Cannot create elysium_modules dir: {}", e))?;
 
             let target_dir = deps_dir.join(pkg);
+            // Ensure parent exists for scoped packages (e.g. @org/)
+            if let Some(parent) = target_dir.parent() {
+                std::fs::create_dir_all(parent)
+                    .map_err(|e| format!("Cannot create directory {}: {}", parent.display(), e))?;
+            }
             let ver = version.filter(|v| !v.is_empty() && *v != "*");
             let display_ver = ver.unwrap_or("latest");
 
@@ -478,19 +488,46 @@ fn cmd_list() -> Result<(), String> {
     let mut count = 0;
     for entry in entries {
         let entry = entry.map_err(|e| format!("Cannot read entry: {}", e))?;
-        if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
-            let name = entry.file_name().to_string_lossy().to_string();
-            // Try to read its elysium.json for version info
-            let manifest_path = entry.path().join("elysium.json");
-            let version = if manifest_path.exists() {
-                match manifest::Manifest::load_from_dir(&entry.path()) {
+        let path = entry.path();
+        let file_name = entry.file_name().to_string_lossy().to_string();
+
+        // Skip non-directories
+        if !entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+            continue;
+        }
+
+        // Handle scoped directories (e.g. @org/)
+        if file_name.starts_with('@') {
+            let scope_name = file_name;
+            let scoped_entries = std::fs::read_dir(&path)
+                .map_err(|e| format!("Cannot read scope dir {}: {}", scope_name, e))?;
+            for scoped in scoped_entries {
+                let scoped = scoped.map_err(|e| format!("Cannot read entry: {}", e))?;
+                if scoped.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                    let pkg_name = format!("{}/{}", scope_name, scoped.file_name().to_string_lossy());
+                    let manifest_path = scoped.path().join("elysium.json");
+                    let version = if manifest_path.exists() {
+                        match manifest::Manifest::load_from_dir(&scoped.path()) {
+                            Ok(m) => format!("v{}", m.version),
+                            Err(_) => "?".to_string(),
+                        }
+                    } else {
+                        "?".to_string()
+                    };
+                    println!("  {}  {}", pkg_name, version);
+                    count += 1;
+                }
+            }
+        } else {
+            let version = if path.join("elysium.json").exists() {
+                match manifest::Manifest::load_from_dir(&path) {
                     Ok(m) => format!("v{}", m.version),
                     Err(_) => "?".to_string(),
                 }
             } else {
                 "?".to_string()
             };
-            println!("  {}  {}", name, version);
+            println!("  {}  {}", file_name, version);
             count += 1;
         }
     }

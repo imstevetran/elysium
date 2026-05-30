@@ -20,6 +20,20 @@ const transportMod = require('./transport');
 const stringMod = require('./string');
 const regexMod = require('./regex');
 const datetimeMod = require('./datetime');
+const asyncMod = require('./async');
+const parallelMod = require('./parallel');
+const bleMod = require('./ble');
+const zigbeeMod = require('./zigbee');
+const langchainMod = require('./langchain');
+const langgraphMod = require('./langgraph');
+const authMod = require('./auth');
+const workerMod = require('./worker');
+const dictMod = require('./dict');
+const jsonMod = require('./json');
+const mathMod = require('./math');
+const envMod = require('./env');
+const httpMod = require('./http');
+const isMod = require('./is');
 
 module.exports = {
   // ARC
@@ -59,4 +73,47 @@ module.exports = {
 
   // DateTime
   datetime: datetimeMod,
+
+  // BLE (Bluetooth Low Energy)
+  ble: bleMod,
+
+  // Zigbee (Home Automation)
+  zigbee: zigbeeMod,
+
+  // LangChain (LLM, Chat, RAG, Agents, AI)
+  langchain: langchainMod,
+
+  // LangGraph (Stateful Graph-Based Agent Orchestration)
+  langgraph: langgraphMod,
+
+  // Auth (Session, JWT, Passkey, OAuth2, Authorization, Multi-tenant)
+  auth: authMod,
+
+  // Worker
+  worker: workerMod,
+
+  // Dict (mutable key-value dictionary)
+  dict: dictMod,
+
+  // JSON (parsing and serialization)
+  json: jsonMod,
+
+  // Math (extended math operations)
+  math: mathMod,
+
+  // Env (environment variables)
+  env: envMod,
+
+  // HTTP (HTTP client with custom headers)
+  http: httpMod,
+
+  // Async/Await
+  __await: asyncMod.__await,
+  __async: asyncMod.__async,
+
+  // Parallel
+  __parallel: parallelMod.__parallel,
+
+  // Runtime type check (instanceof)
+  __is_instanceof: isMod.__is_instanceof,
 };

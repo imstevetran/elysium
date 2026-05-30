@@ -1,0 +1,70 @@
+// Schedule (cron) example — functions that run on a timer in the background
+//
+// ## Supported schedule formats
+//
+// ### Cron-style (5 fields):
+//   "* * * * *"          every minute
+//   "*/5 * * * *"        every 5 minutes
+//   "0 */2 * * *"        every 2 hours
+//   "30 8 * * *"         daily at 08:30
+//
+// ### Friendly interval formats:
+//   "every 5 seconds"
+//   "every minute"
+//   "every 10 minutes"
+//   "every hour"
+//   "every 2 hours"
+//   "hourly"
+//   "minutely"
+//   "daily" / "every day"
+//   "weekly" / "every week"
+//   "monthly" / "every month"
+//
+// ### Friendly time-of-day (daily at exact time):
+//   "at 08:00 every day"
+//   "daily at 08:00"
+//   "every day at 08:00"
+//   "at 17:30"
+//
+// ### Friendly day-of-week + time:
+//   "every Monday at 09:00"
+//   "at 10:30 on Monday"
+//   "every Monday"
+//
+// Each scheduled function runs as a detached thread that loops forever.
+// For time-of-day schedules, the initial sleep is computed at runtime
+// using time() arithmetic so the first invocation lands on the
+// correct wall-clock time.
+
+// Interval: every 10 minutes
+schedule "every 10 minutes" func everyTenMinutes() {
+    print("tick every 10 minutes\n")
+}
+
+// Time-of-day: daily at 08:00 (uses runtime time() for initial offset)
+schedule "daily at 08:00" func morningRoutine() {
+    print("good morning\n")
+}
+
+// Cron-style: every 5 minutes
+schedule "*/5 * * * *" func cronEveryFive() {
+    print("cron: tick every 5 minutes\n")
+}
+
+// Friendly day-of-week + time: every Monday at 09:00
+schedule "every Monday at 09:00" func mondayMorning() {
+    print("monday morning task\n")
+}
+
+// Short aliases work too:
+schedule "hourly" func eachHour() {
+    print("once per hour\n")
+}
+
+func main() {
+    print("main program started\n")
+    // Scheduled functions run in background threads.
+    // The main program must keep running (e.g. via event loop or
+    // infinite sleep) since threads are detached.
+    print("main program done\n")
+}

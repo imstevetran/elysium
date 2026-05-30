@@ -1,0 +1,10 @@
+// Wait keyword: pauses execution for N milliseconds
+// Uses usleep(micros) under the hood.
+
+func main() {
+    print("starting...\n")
+    wait 1000  // pause for 1 second
+    print("waited 1 second\n")
+    wait 500   // pause for 500ms
+    print("done\n")
+}

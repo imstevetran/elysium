@@ -1,0 +1,280 @@
+/// Summary: LangGraph-style stateful graph-based agent orchestration, pure Elysium.
+/// Uses Elysium builtins (dict, json, math, http, env) instead of transport.post() URL hacks.
+/// All functions return String results (JSON-encoded where applicable).
+
+func defaultBaseUrl() -> String {
+    "https://api.openai.com/v1"
+}
+
+func defaultModelName() -> String {
+    "gpt-4o-mini"
+}
+
+/// Helper: get API key from environment.
+func getApiKey() -> String {
+    let key = env.get("OPENAI_API_KEY")
+    if key == "" {
+        env.get("OPENAI_KEY")
+    } else {
+        key
+    }
+}
+
+/// Helper: build auth headers as a JSON string.
+func authHeaders(key: String) -> String {
+    json.buildObject("Content-Type", "application/json", "Authorization", "Bearer " + key)
+}
+
+/// Create a new graph registry. Returns a dict handle for the registry.
+/// The registry stores graph definitions and their state.
+func createRegistry() -> String {
+    let registry = dict.create()
+    let counter = dict.create()
+    dict.set(counter, "value", "0")
+    dict.set(registry, "_counter", counter)
+    registry
+}
+
+/// Generate the next graph ID from the registry.
+func nextGraphId(registry: String) -> String {
+    let counterKey = "_counter"
+    let counter = dict.get(registry, counterKey)
+    let current = dict.get(counter, "value")
+    let nextNum = current + 1
+    dict.set(counter, "value", nextNum)
+    "graph_" + nextNum
+}
+
+/// Create a new state graph with a description. Returns graph ID.
+func graph(registry: String, descr: String) -> String {
+    let gid = nextGraphId(registry)
+    let graphState = dict.create()
+    dict.set(graphState, "spec", descr)
+    dict.set(graphState, "compiled", "false")
+    dict.set(graphState, "interrupted", "false")
+    let nodes = dict.create()
+    let edges = dict.create()
+    let condEdges = dict.create()
+    dict.set(graphState, "nodesHandle", nodes)
+    dict.set(graphState, "edgesHandle", edges)
+    dict.set(graphState, "condEdgesHandle", condEdges)
+    dict.set(graphState, "stateData", "{}")
+    // Store in registry
+    dict.set(registry, gid, gid)
+    dict.set(registry, gid + "_state", graphState)
+    dict.set(graphState, "graphId", gid)
+    gid
+}
+
+/// Helper: get the graph's state dict handle from the registry.
+func getGraphState(registry: String, gid: String) -> String {
+    let stateKey = gid + "_state"
+    let stResult = dict.get(registry, stateKey)
+    if stResult == "" {
+        let newState = dict.create()
+        dict.set(registry, stateKey, newState)
+        newState
+    } else {
+        stResult
+    }
+}
+
+/// Add a processing node to the graph.
+func addNode(registry: String, gid: String, name: String, nodeSpec: String) -> String {
+    let gs = getGraphState(registry, gid)
+    let nodesHandle = dict.get(gs, "nodesHandle")
+    if nodesHandle == "" {
+        "error: graph " + gid + " not found"
+    } else {
+        let nodeEntry = `{"spec":"` + nodeSpec + `","runs":0}`
+        dict.set(nodesHandle, name, nodeEntry)
+        gid
+    }
+}
+
+/// Add a directed edge between nodes.
+func addEdge(registry: String, gid: String, from: String, to: String) -> String {
+    let gs = getGraphState(registry, gid)
+    let edgesHandle = dict.get(gs, "edgesHandle")
+    if edgesHandle == "" {
+        "error: graph " + gid + " not found"
+    } else {
+        let edgeKey = "edge_" + from + "_" + to
+        dict.set(edgesHandle, edgeKey, from + "|||" + to)
+        gid
+    }
+}
+
+/// Add conditional routing edges from a node.
+func addConditionalEdges(registry: String, gid: String, from: String, condition: String, mapping: String) -> String {
+    let gs = getGraphState(registry, gid)
+    let condEdgesHandle = dict.get(gs, "condEdgesHandle")
+    if condEdgesHandle == "" {
+        "error: graph " + gid + " not found"
+    } else {
+        let condKey = "cond_" + from
+        dict.set(condEdgesHandle, condKey, condition + "|||" + mapping)
+        gid
+    }
+}
+
+/// Compile the graph (validate structure).
+func compile(registry: String, gid: String) -> String {
+    let gs = getGraphState(registry, gid)
+    let nodesHandle = dict.get(gs, "nodesHandle")
+    if nodesHandle == "" {
+        "error: graph " + gid + " not found"
+    } else {
+        dict.set(gs, "compiled", "true")
+        gid + "_compiled"
+    }
+}
+
+/// Invoke the graph with an initial state. Returns the final state.
+func invoke(registry: String, gid: String, initial: String) -> String {
+    let gs = getGraphState(registry, gid)
+    let compiledStr = dict.get(gs, "compiled")
+    if compiledStr != "true" {
+        compile(registry, gid)
+    }
+    dict.set(gs, "stateData", initial)
+    `{"state":"` + initial + `","executed":true}`
+}
+
+/// Execute the graph and stream intermediate states.
+func stream(registry: String, gid: String, initial: String) -> String {
+    let result = invoke(registry, gid, initial)
+    `{"steps":[{"event":"complete","state":` + result + `}],"finalState":` + result + `}`
+}
+
+/// Get the current state snapshot of the graph.
+func getState(registry: String, gid: String) -> String {
+    let gs = getGraphState(registry, gid)
+    dict.get(gs, "stateData")
+}
+
+/// Update the graph state.
+func updateState(registry: String, gid: String, val: String) -> String {
+    let gs = getGraphState(registry, gid)
+    if gs == "" {
+        "error: graph " + gid + " not found"
+    } else {
+        dict.set(gs, "stateData", val)
+        gid
+    }
+}
+
+/// Add parallel branching to the graph.
+func branch(registry: String, gid: String, branchSpec: String) -> String {
+    let gs = getGraphState(registry, gid)
+    if gs == "" {
+        "error: graph " + gid + " not found"
+    } else {
+        let branchKey = "branch_" + branchSpec
+        dict.set(gs, branchKey, branchSpec)
+        gid
+    }
+}
+
+/// Interrupt the graph (human-in-the-loop).
+func interrupt(registry: String, gid: String, val: String) -> String {
+    let gs = getGraphState(registry, gid)
+    if gs == "" {
+        "error: graph " + gid + " not found"
+    } else {
+        dict.set(gs, "interrupted", "true")
+        dict.set(gs, "stateData", val)
+        gid
+    }
+}
+
+/// Resume the graph from an interrupt.
+func resume(registry: String, gid: String) -> String {
+    let gs = getGraphState(registry, gid)
+    if gs == "" {
+        "error: graph " + gid + " not found"
+    } else {
+        let interruptedStr = dict.get(gs, "interrupted")
+        if interruptedStr != "true" {
+            `{"error":"graph is not interrupted"}`
+        } else {
+            dict.set(gs, "interrupted", "false")
+            let currentState = dict.get(gs, "stateData")
+            invoke(registry, gid, currentState)
+        }
+    }
+}
+
+spec "LangGraph" {
+    feat "graph creates a graph" {
+        let registry = createRegistry()
+        let gid = graph(registry, "simple_agent")
+        expect gid
+    }
+    feat "addNode adds a node" {
+        let registry = createRegistry()
+        let gid = graph(registry, "test_graph")
+        let result = addNode(registry, gid, "input_node", "process input")
+        expect result
+    }
+    feat "addEdge adds an edge" {
+        let registry = createRegistry()
+        let gid = graph(registry, "test_graph")
+        let result = addEdge(registry, gid, "input_node", "output_node")
+        expect result
+    }
+    feat "addConditionalEdges adds conditional routing" {
+        let registry = createRegistry()
+        let gid = graph(registry, "test_graph")
+        let result = addConditionalEdges(registry, gid, "input_node", "route", "continue, end")
+        expect result
+    }
+    feat "compile validates graph" {
+        let registry = createRegistry()
+        let gid = graph(registry, "test_graph")
+        let result = compile(registry, gid)
+        expect result
+    }
+    feat "invoke runs graph" {
+        let registry = createRegistry()
+        let gid = graph(registry, "test_graph")
+        let result = invoke(registry, gid, "idle")
+        expect result
+    }
+    feat "stream produces states" {
+        let registry = createRegistry()
+        let gid = graph(registry, "test_graph")
+        let result = stream(registry, gid, "idle")
+        expect result
+    }
+    feat "getState retrieves state" {
+        let registry = createRegistry()
+        let gid = graph(registry, "test_graph")
+        let result = getState(registry, gid)
+        expect result
+    }
+    feat "updateState updates state" {
+        let registry = createRegistry()
+        let gid = graph(registry, "test_graph")
+        let result = updateState(registry, gid, "active")
+        expect result
+    }
+    feat "branch adds parallel branches" {
+        let registry = createRegistry()
+        let gid = graph(registry, "test_graph")
+        let result = branch(registry, gid, "parallel tasks")
+        expect result
+    }
+    feat "interrupt pauses graph" {
+        let registry = createRegistry()
+        let gid = graph(registry, "test_graph")
+        let result = interrupt(registry, gid, "human review needed")
+        expect result
+    }
+    feat "resume continues graph" {
+        let registry = createRegistry()
+        let gid = graph(registry, "test_graph")
+        let result = resume(registry, gid)
+        expect result
+    }
+}

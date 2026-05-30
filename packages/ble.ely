@@ -1,0 +1,56 @@
+/// Summary: Bluetooth Low Energy (BLE) operations, pure Elysium.
+/// Uses transport.post() to delegate to the JS runtime (ble.js).
+/// Survives both UI and backend builds — no compiler-level builtins.
+
+/// Start scanning for nearby BLE devices.
+func scan() -> String {
+    transport.post("__ble__/scan", "")
+}
+
+/// Stop scanning for BLE devices.
+func stopScan() {
+    transport.post("__ble__/stopScan", "")
+}
+
+/// Connect to a BLE device by its address.
+/// Returns the device ID (same as address) on success.
+func connect(address: String) -> String {
+    transport.post("__ble__/connect", address)
+}
+
+/// Disconnect from a BLE device.
+func disconnect(deviceId: String) {
+    transport.post("__ble__/disconnect", deviceId)
+}
+
+/// Read a characteristic value from a BLE device.
+/// Returns the hex-encoded value as a string.
+func readCharacteristic(deviceId: String, serviceUuid: String, charUuid: String) -> String {
+    transport.post("__ble__/readCharacteristic", deviceId + "|||" + serviceUuid + "|||" + charUuid)
+}
+
+/// Write a hex-encoded value to a BLE characteristic.
+func writeCharacteristic(deviceId: String, serviceUuid: String, charUuid: String, value: String) {
+    transport.post("__ble__/writeCharacteristic", deviceId + "|||" + serviceUuid + "|||" + charUuid + "|||" + value)
+}
+
+/// Read the RSSI (signal strength) of a BLE device.
+/// Returns dBm as a string.
+func readRssi(deviceId: String) -> String {
+    transport.post("__ble__/readRssi", deviceId)
+}
+
+/// Get the human-readable name of a BLE device.
+func deviceName(deviceId: String) -> String {
+    transport.post("__ble__/deviceName", deviceId)
+}
+
+/// Check if a BLE device is currently connected.
+func isConnected(deviceId: String) -> String {
+    transport.post("__ble__/isConnected", deviceId)
+}
+
+/// Check if the BLE module is currently scanning.
+func isScanning() -> String {
+    transport.post("__ble__/isScanning", "")
+}

@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>UI Counter Component — Elysium Recipes</title>
+  <meta name="description" content="Build a reactive counter component with state and events in Elysium's declarative UI layer." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../assets/css/style.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>⚡</text></svg>" />
+</head>
+<body>
+  <header class="navbar">
+    <a href="../" class="logo"><svg viewBox="0 0 28 28" fill="none"><rect x="2" y="2" width="24" height="24" rx="6" stroke="%236c63ff" stroke-width="2" /><text x="14" y="20" text-anchor="middle" font-size="16" font-weight="bold" fill="%236c63ff">E</text></svg><span>Elysium</span></a>
+    <button class="menu-toggle" aria-label="Toggle menu"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
+    <nav>
+      <a href="../guide/">Guide</a>
+      <a href="../ui/">UI</a>
+      <a href="../std/">Std Lib</a>
+      <a href="../spec/">Spec</a>
+      <a href="../tooling/">Tooling</a>
+      <a href="../recipes/" class="active">Recipes</a>
+    </nav>
+  </header>
+  <main class="main">
+    <div class="breadcrumbs"><a href="../">Home</a> / <a href="./">Recipes</a> / <span>UI Counter</span></div>
+    <div class="page-header">
+      <h1>UI Counter Component</h1>
+      <p>Build a reactive counter with Elysium's declarative UI layer. <span class="tag diff-intermediate">Intermediate</span></p>
+    </div>
+    <section class="content-section animate-on-scroll">
+      <h2>Counter Component (`.elyx` syntax)</h2>
+<div class="code-header"><span>counter.elyx</span></div>
+<pre><code><span class="hl-comment">/// Summary: Counter component with increment button.</span>
+<span class="hl-kw">component</span> <span class="hl-type">Counter</span> {
+    <span class="hl-kw">state</span> count = <span class="hl-num">0</span>
+
+    render {
+        <span class="hl-type">Column</span> {
+            <span class="hl-type">Text</span> <span class="hl-str">"Count: "</span> + count
+            <span class="hl-type">Button</span> label=<span class="hl-str">"Increment"</span> onClick={count = count + <span class="hl-num">1</span>}
+        }
+    }
+}</code></pre>
+    </section>
+    <section class="content-section animate-on-scroll">
+      <h2>Greeting with Conditional Rendering</h2>
+<pre><code><span class="hl-kw">component</span> <span class="hl-type">Greeting</span> {
+    <span class="hl-kw">state</span> isLoggedIn = <span class="hl-num">true</span>
+
+    <span class="hl-type">Column</span> {
+        <span class="hl-kw">if</span> isLoggedIn <span class="hl-kw">then</span>
+            <span class="hl-type">Text</span>(<span class="hl-str">"Welcome back!"</span>)
+        <span class="hl-kw">else</span>
+            <span class="hl-type">Button</span>(label: <span class="hl-str">"Login"</span>) {
+                isLoggedIn = <span class="hl-num">true</span>
+            }
+    }
+}</code></pre>
+    </section>
+    <section class="content-section animate-on-scroll">
+      <h2>UI Features Used</h2>
+      <table>
+        <tr><th>Feature</th><th>Description</th></tr>
+        <tr><td><code>component</code></td><td>Declare a reactive UI component</td></tr>
+        <tr><td><code>state</code></td><td>Mutable, observable variables</td></tr>
+        <tr><td><code>if … then</code></td><td>Conditional rendering inside view tree</td></tr>
+        <tr><td><code>Column</code></td><td>Vertical stack layout</td></tr>
+        <tr><td><code>Text</code></td><td>Simple text label</td></tr>
+        <tr><td><code>Button</code></td><td>Clickable with <code>onClick</code> handler</td></tr>
+      </ul>
+    </section>
+    <section class="content-section animate-on-scroll">
+      <h2>How It Works</h2>
+      <ul>
+        <li>Views are <strong>immutable descriptions</strong> — no direct DOM manipulation.</li>
+        <li>The runtime <strong>diffs and patches</strong> the actual UI automatically.</li>
+        <li>Any view that reads a <code>state</code> variable re-renders when that variable changes.</li>
+        <li>The UI layer compiles to platform-native widgets (or a virtual DOM) — it's part of the language, not an external framework.</li>
+      </ul>
+    </section>
+  </main>
+  <footer class="footer"><p>Elysium 2.0 &middot; <a href="https://github.com/imstevetran/elysium">GitHub</a></p></footer>
+  <script src="../assets/js/main.js"></script>
+</body>
+</html>

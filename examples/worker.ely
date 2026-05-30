@@ -1,0 +1,43 @@
+/// Summary: Demonstrate portable worker API in Elysium
+/// Parameters: None
+/// Returns: String result from worker operations
+
+func main() -> String {
+    // Create a worker with inline script code
+    let workerId = worker.create("echo worker")
+    print("Worker created: " + workerId)
+
+    // Check it's running
+    let running = worker.isRunning(workerId)
+    print("Is running: " + running)
+
+    // Fire-and-forget message (non-blocking)
+    let postResult = worker.post(workerId, "Hello from Elysium")
+    print("Posted: " + postResult)
+
+    // Read next message from queue (non-blocking)
+    let reply = worker.receive(workerId)
+    print("Reply: " + reply)
+
+    // Blocking send+wait for reply
+    let echoResult = worker.send(workerId, "ping")
+    print("Echo result: " + echoResult)
+
+    // Wait for a message (blocking with timeout)
+    let msg = worker.wait(workerId)
+    print("Received: " + msg)
+
+    // Get active worker count
+    let count = worker.activeCount()
+    print("Active workers: " + count)
+
+    // Terminate the worker
+    worker.terminate(workerId)
+    print("Worker terminated")
+
+    // Terminate all remaining workers
+    worker.terminateAll()
+    print("All workers terminated")
+
+    return "ok"
+}

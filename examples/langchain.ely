@@ -1,0 +1,47 @@
+/// Summary: LangChain-style AI operations in pure Elysium.
+/// Imports the langchain package from the EPM registry.
+import "#/langchain" as langchain
+
+func main() {
+    // Simple LLM completion
+    let response = langchain.llm("gpt-4o-mini", "What is the capital of France?")
+    print(response + "\n")
+
+    // Chat with system prompt
+    let reply = langchain.chat("gpt-4o", "You are a helpful assistant.", "Tell me a short joke.")
+    print(reply + "\n")
+
+    // Embeddings
+    let vec = langchain.embed("Elysium programming language")
+    print(vec + "\n")
+
+    // Prompt template
+    let greeting = langchain.template("Hello, {name}! Today is {day}.", "plain text vars")
+    print(greeting + "\n")
+
+    // RAG: answer with context
+    let answer = langchain.rag("What is Elysium?", "Elysium is a human-friendly programming language.")
+    print(answer + "\n")
+
+    // Summarize text
+    let summary = langchain.summarize("A modern programming language with AI-native features.")
+    print(summary + "\n")
+
+    // Analyze text with custom instruction
+    let sentiment = langchain.analyze("I love this new language!", "Determine the sentiment.")
+    print(sentiment + "\n")
+
+    // Classify text into categories
+    let category = langchain.classify("Buy now! Limited offer!", "spam, promotional, informational")
+    print(category + "\n")
+
+    // Translate text
+    let translated = langchain.translate("Hello, how are you?", "Spanish")
+    print(translated + "\n")
+
+    // Similarity between embedding vectors
+    let sim = langchain.similarity("[0.1, 0.2, 0.3]", "[0.4, 0.5, 0.6]")
+    print(sim + "\n")
+
+    print("langchain operations completed\n")
+}

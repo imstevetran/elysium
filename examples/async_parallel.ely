@@ -1,0 +1,33 @@
+// Async/Await + Parallel Blocks Example
+//
+// This demonstrates the new async/await and parallel block features.
+//
+// Note: In the C backend, async functions with await are executed
+// synchronously for v1 (await points run inline). Parallel blocks
+// use pthread_create/pthread_join for true parallelism.
+//
+// In the JS runtime, async/await use native Promises and parallel
+// blocks use Promise.all for concurrent execution.
+
+// Async function declaration (await is recognized inside async context)
+async func fetchData() -> string {
+    return "data"
+}
+
+func main() {
+    // Parallel block — each statement runs in its own thread
+    parallel {
+        print("task a\n")
+        print("task b\n")
+        print("task c\n")
+    }
+    print("all parallel tasks done\n")
+}
+
+// Multiple parallel blocks can be used in a program
+func processBatch() {
+    parallel {
+        print("batch item 1\n")
+        print("batch item 2\n")
+    }
+}

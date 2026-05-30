@@ -1,0 +1,88 @@
+/// Summary: LangChain-style AI operations, pure Elysium.
+/// Uses transport builtins to route to the JS runtime's langchain module.
+/// All functions return String results (JSON-encoded where applicable).
+
+/// Perform a simple LLM completion.
+func llm(model: String, prompt: String) -> String {
+    let url = "__langchain__/llm/" + model
+    transport.post(url, prompt)
+}
+
+/// Single chat turn with system prompt.
+func chat(model: String, system: String, message: String) -> String {
+    let url = "__langchain__/chat/" + model
+    let body = system + "|||" + message
+    transport.post(url, body)
+}
+
+/// Generate text embeddings.
+func embed(text: String) -> String {
+    transport.post("__langchain__/embed", text)
+}
+
+/// Compute cosine similarity between two embedding vectors.
+func similarity(a: String, b: String) -> String {
+    let body = a + "|||" + b
+    transport.post("__langchain__/similarity", body)
+}
+
+/// Fill a prompt template.
+func template(templateStr: String, vars: String) -> String {
+    let body = templateStr + "|||" + vars
+    transport.post("__langchain__/template", body)
+}
+
+/// Answer a query using provided context (Retrieval-Augmented Generation).
+func rag(query: String, context: String) -> String {
+    let body = query + "|||" + context
+    transport.post("__langchain__/rag", body)
+}
+
+/// Summarize text.
+func summarize(text: String) -> String {
+    transport.post("__langchain__/summarize", text)
+}
+
+/// Analyze text with custom instruction.
+func analyze(text: String, instruction: String) -> String {
+    let body = text + "|||" + instruction
+    transport.post("__langchain__/analyze", body)
+}
+
+/// Classify text into given labels (comma-separated).
+func classify(text: String, labels: String) -> String {
+    let body = text + "|||" + labels
+    transport.post("__langchain__/classify", body)
+}
+
+/// Translate text to a target language.
+func translate(text: String, targetLang: String) -> String {
+    let body = text + "|||" + targetLang
+    transport.post("__langchain__/translate", body)
+}
+
+/// Run an agent with instructions.
+func agent(model: String, instructions: String, query: String) -> String {
+    let url = "__langchain__/agent/" + model
+    let body = instructions + "|||" + query
+    transport.post(url, body)
+}
+
+/// Streaming agent (returns final result).
+func agentStream(model: String, instructions: String, query: String) -> String {
+    let url = "__langchain__/agentStream/" + model
+    let body = instructions + "|||" + query
+    transport.post(url, body)
+}
+
+/// Run a chain of steps.
+func chain(steps: String, input: String) -> String {
+    let body = steps + "|||" + input
+    transport.post("__langchain__/chain", body)
+}
+
+/// Extract structured data from text per a schema.
+func extract(text: String, schema: String) -> String {
+    let body = text + "|||" + schema
+    transport.post("__langchain__/extract", body)
+}

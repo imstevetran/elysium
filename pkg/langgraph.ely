@@ -1,0 +1,71 @@
+/// Summary: LangGraph-style stateful graph-based agent orchestration, pure Elysium.
+/// Uses transport builtins to route to the JS runtime's langgraph module.
+/// All functions return String results (JSON-encoded where applicable).
+
+/// Create a new state graph with a description.
+func graph(descr: String) -> String {
+    transport.post("__langgraph__/graph", descr)
+}
+
+/// Add a processing node to the graph.
+func addNode(gid: String, name: String, nodeSpec: String) -> String {
+    let body = gid + "|||" + name + "|||" + nodeSpec
+    transport.post("__langgraph__/addNode", body)
+}
+
+/// Add a directed edge between nodes.
+func addEdge(gid: String, from: String, to: String) -> String {
+    let body = gid + "|||" + from + "|||" + to
+    transport.post("__langgraph__/addEdge", body)
+}
+
+/// Add conditional routing edges from a node.
+func addConditionalEdges(gid: String, from: String, condition: String, mapping: String) -> String {
+    let body = gid + "|||" + from + "|||" + condition + "|||" + mapping
+    transport.post("__langgraph__/addConditionalEdges", body)
+}
+
+/// Compile the graph (validate structure).
+func compile(gid: String) -> String {
+    transport.post("__langgraph__/compile", gid)
+}
+
+/// Invoke the graph with an initial state. Returns the final state.
+func invoke(gid: String, initial: String) -> String {
+    let body = gid + "|||" + initial
+    transport.post("__langgraph__/invoke", body)
+}
+
+/// Execute the graph and stream intermediate states.
+func stream(gid: String, initial: String) -> String {
+    let body = gid + "|||" + initial
+    transport.post("__langgraph__/stream", body)
+}
+
+/// Get the current state snapshot of the graph.
+func getState(gid: String) -> String {
+    transport.post("__langgraph__/getState", gid)
+}
+
+/// Update the graph state.
+func updateState(gid: String, val: String) -> String {
+    let body = gid + "|||" + val
+    transport.post("__langgraph__/updateState", body)
+}
+
+/// Add parallel branching to the graph.
+func branch(gid: String, branchSpec: String) -> String {
+    let body = gid + "|||" + branchSpec
+    transport.post("__langgraph__/branch", body)
+}
+
+/// Interrupt the graph (human-in-the-loop).
+func interrupt(gid: String, val: String) -> String {
+    let body = gid + "|||" + val
+    transport.post("__langgraph__/interrupt", body)
+}
+
+/// Resume the graph from an interrupt.
+func resume(gid: String) -> String {
+    transport.post("__langgraph__/resume", gid)
+}

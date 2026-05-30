@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tooling — Elysium 2.0</title>
+  <meta name="description" content="Elysium 2.0 tooling — CLI compiler, EPM package manager, npm package, syntax highlighting, linting, and documentation generation." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../assets/css/style.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>⚡</text></svg>" />
+</head>
+<body>
+  <header class="navbar">
+    <a href="../" class="logo">
+      <svg viewBox="0 0 28 28" fill="none"><rect x="2" y="2" width="24" height="24" rx="6" stroke="%236c63ff" stroke-width="2" /><text x="14" y="20" text-anchor="middle" font-size="16" font-weight="bold" fill="%236c63ff">E</text></svg>
+      <span>Elysium</span>
+    </a>
+    <button class="menu-toggle" aria-label="Toggle menu">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+    </button>
+    <nav>
+      <a href="../guide/">Guide</a>
+      <a href="../ui/">UI</a>
+      <a href="../std/">Std Lib</a>
+      <a href="../spec/">Spec</a>
+      <a href="../tooling/" class="active">Tooling</a>
+      <a href="../recipes/">Recipes</a>
+    </nav>
+  </header>
+
+  <main class="main">
+    <div class="breadcrumbs">
+      <a href="../">Home</a> / <span>Tooling</span>
+    </div>
+
+    <div class="page-header">
+      <h1>Tooling</h1>
+      <p>Everything you need to develop, build, test, and ship Elysium applications.</p>
+    </div>
+
+    <div class="toc">
+      <div class="toc-title">Table of Contents</div>
+      <ol class="toc-list">
+        <li><a href="#cli">CLI Compiler</a></li>
+        <li><a href="#test">Test Runner</a></li>
+        <li><a href="#update">Update Command</a></li>
+        <li><a href="#migrate">Migrate Command</a></li>
+        <li><a href="#npm">npm Package</a></li>
+        <li><a href="#epm">EPM Package Manager</a></li>
+        <li><a href="#manifest">Project Manifest (elysium.json)</a></li>
+        <li><a href="#linter">Linter</a></li>
+        <li><a href="#highlighter">Syntax Highlighting</a></li>
+        <li><a href="#codegen">Documentation Generation</a></li>
+        <li><a href="#stub-env">Environment Filtering</a></li>
+      </ol>
+    </div>
+
+    <section id="cli" class="content-section animate-on-scroll">
+      <h2>CLI Compiler</h2>
+      <p>The <code>elysium</code> (or <code>ely</code>) CLI is the primary interface for compiling and running Elysium programs. It's a Rust compiler with an LLVM backend.</p>
+
+      <h3>Commands</h3>
+      <table>
+        <tr><th>Command</th><th>Description</th></tr>
+        <tr><td><code>elysium build &lt;file&gt;</code></td><td>Compile an <code>.ely</code> or <code>.elyx</code> file to a native binary</td></tr>
+        <tr><td><code>elysium run &lt;file&gt;</code></td><td>Compile and run immediately</td></tr>
+        <tr><td><code>elysium check &lt;file&gt;</code></td><td>Type-check without code generation</td></tr>
+        <tr><td><code>elysium test [path]</code></td><td>Run spec-driven tests (scans <code>tests/</code> or given file)</td></tr>
+        <tr><td><code>elysium update [package]</code></td><td>Check EPM registry for newer dependency versions</td></tr>
+        <tr><td><code>elysium migrate [path]</code></td><td>Auto-migrate source code to latest syntax</td></tr>
+        <tr><td><code>elysium repl</code></td><td>Start an interactive REPL session</td></tr>
+        <tr><td><code>elysium doc &lt;file&gt;</code></td><td>Generate documentation from <code>/// Summary:</code> comments</td></tr>
+        <tr><td><code>elysium deps &lt;file&gt;</code></td><td>Show the dependency graph of a program</td></tr>
+        <tr><td><code>elysium env &lt;name&gt;</code></td><td>Set the active environment (local/dev/test/prod)</td></tr>
+        <tr><td><code>elysium highlight &lt;file&gt; --format &lt;ansi|html&gt;</code></td><td>Output syntax-highlighted source</td></tr>
+        <tr><td><code>elysium port &lt;file.js&gt;</code></td><td>Port JavaScript/TypeScript to Elysium</td></tr>
+      </table>
+
+      <h3>Environment Flag</h3>
+      <p>Use <code>--env</code> (or <code>--env-file</code>) to control which environment-specific stubs are included:</p>
+<pre><code>elysium build app.ely <span class="hl-op">--</span>-env test
+elysium run app.ely <span class="hl-op">--</span>-env dev
+elysium check app.ely <span class="hl-op">--</span>-env prod</code></pre>
+
+      <h3>Test Options</h3><p><code>--dry-run</code> lists specs and feats without type-checking. Default env for tests is <code>test</code>.
+      </p>
+
+      <h3>Update Options</h3>
+      <table>
+        <tr><th>Flag</th><th>Description</th></tr>
+        <tr><td><code>--apply</code> / <code>-a</code></td><td>Write updated version constraints to <code>elysium.json</code></td></tr>
+        <tr><td><code>--latest</code></td><td>Upgrade to absolute latest version (ignores constraint range)</td></tr>
+        <tr><td><code>--force</code></td><td>Allow downgrade if latest is lower than current</td></tr>
+      </table>
+
+      <h3>Migrate Options</h3>
+      <table>
+        <tr><th>Flag</th><th>Description</th></tr>
+        <tr><td><code>--check</code></td><td>Exit non-zero if any file needs migration (CI mode)</td></tr>
+        <tr><td><code>--dry-run</code></td><td>Show what would change without writing</td></tr>
+        <tr><td><code>--force</code></td><td>Apply migrations marked as "requires manual review"</td></tr>
+      </table>
+      <p>Registered migrations: <code>webworker-to-worker</code>, <code>bm-to-bench</code>, <code>normalize-imports</code>, <code>describe-to-spec</code>.</p>
+
+      <h3>Build Pipeline</h3>
+      <ol>
+        <li><strong>Source → Lexer</strong> — Tokenization via <code>logos</code></li>
+        <li><strong>Parser</strong> — Recursive-descent parsing to AST</li>
+        <li><strong>Desugaring</strong> — Import aliases, builtin calls (<code>console.*</code>, <code>fs.*</code>, <code>string.*</code>, etc.)</li>
+        <li><strong>Environment Stub Filtering</strong> — Remove stubs not matching <code>--env</code></li>
+        <li><strong>Type Checker</strong> — Full type inference and checking</li>
+        <li><strong>Ownership Checker</strong> — Validate <code>only let</code> semantics</li>
+        <li><strong>HIR &amp; MIR</strong> — High and Mid-level IR lowering</li>
+        <li><strong>LLVM IR Codegen</strong> — Generate native code via <code>inkwell</code></li>
+        <li><strong>Native Binary</strong> — Output executable (or WASM for browser <code>target: "wasm"</code>)</li>
+      </ol>
+    </section>
+
+    <section id="npm" class="content-section animate-on-scroll">
+      <h2>npm Package</h2>
+      <p>Published as <code>elysium-lang</code> on npm. Ships the full Rust compiler and a complete JavaScript runtime.</p>
+
+      <h3>Installation</h3>
+<pre><code>npm install -g elysium-lang
+
+<span class="hl-comment"># Now you can use the CLI</span>
+elysium run hello.ely
+ely --version</code></pre>
+
+      <h3>JavaScript Runtime</h3>
+      <p>Use Elysium's standard library from JavaScript:</p>
+<pre><code><span class="hl-kw">const</span> elysium = require(<span class="hl-str">'elysium-lang'</span>)
+elysium.console.log(<span class="hl-str">'Hello from Elysium runtime!'</span>)
+elysium.string.sha256(<span class="hl-str">'hello'</span>)
+elysium.datetime.now()</code></pre>
+
+      <h3>Runtime Modules</h3>
+      <table>
+        <tr><th>Module</th><th>Description</th></tr>
+        <tr><td><code>arc</code></td><td>Reference counting: <code>Ref</code>, <code>Weak</code>, <code>Unowned</code></td></tr>
+        <tr><td><code>task</code></td><td>Async task scheduling via <code>setImmediate</code></td></tr>
+        <tr><td><code>channel</code></td><td>Async message passing with <code>EventEmitter</code></td></tr>
+        <tr><td><code>ui</code></td><td>Virtual DOM diffing: <code>View</code>, <code>Style</code>, <code>diff</code>, <code>Patch</code></td></tr>
+        <tr><td><code>console</code></td><td>Unified logging</td></tr>
+        <tr><td><code>fs</code></td><td>Filesystem operations (Node's <code>fs</code> module)</td></tr>
+        <tr><td><code>transport</code></td><td>HTTP, WebSocket, MQTT + package routing</td></tr>
+        <tr><td><code>string</code></td><td>String utilities (30+ methods, crypto)</td></tr>
+        <tr><td><code>regex</code></td><td>Regular expressions</td></tr>
+        <tr><td><code>datetime</code></td><td>Date/time (unix timestamps)</td></tr>
+        <tr><td><code>dict</code></td><td>Key-value string dictionaries</td></tr>
+        <tr><td><code>json</code></td><td>JSON parsing, construction, and querying</td></tr>
+        <tr><td><code>math</code></td><td>Scalar and vector math operations</td></tr>
+        <tr><td><code>env</code></td><td>Environment variable access</td></tr>
+        <tr><td><code>http</code></td><td>HTTP request/response utilities</td></tr>
+        <tr><td><code>auth</code></td><td>JWT, sessions, passwords, OAuth2, RBAC</td></tr>
+        <tr><td><code>is</code></td><td>Runtime type checking (<code>__is_instanceof</code>)</td></tr>
+        <tr><td><code>async</code></td><td>Async helpers (<code>__await</code>, <code>__async</code>)</td></tr>
+        <tr><td><code>parallel</code></td><td>Parallel execution via <code>Promise.all</code></td></tr>
+      </table>
+    </section>
+
+    <section id="epm" class="content-section animate-on-scroll">
+      <h2>EPM — Elysium Package Manager</h2>
+      <p>EPM manages dependencies for Elysium projects using flat dependency resolution. It ships as a Rust crate.</p>
+
+      <h3>Commands</h3>
+      <table>
+        <tr><th>Command</th><th>Description</th></tr>
+        <tr><td><code>epm init [name]</code></td><td>Scaffold a new package (creates <code>elysium.json</code> + <code>main.ely</code>)</td></tr>
+        <tr><td><code>epm install [package]</code></td><td>Install all deps or a specific package</td></tr>
+        <tr><td><code>epm install --shake</code></td><td>Install and tree-shake in one step</td></tr>
+        <tr><td><code>epm install --legacy</code></td><td>Allow multiple versions of the same dependency</td></tr>
+        <tr><td><code>epm lock</code></td><td>Generate <code>elysium.lock</code> from current resolution</td></tr>
+        <tr><td><code>epm publish</code></td><td>Tarball the package and push to registry</td></tr>
+        <tr><td><code>epm search &lt;query&gt;</code></td><td>Search registry by name or description</td></tr>
+        <tr><td><code>epm info &lt;package&gt;</code></td><td>Show package details and versions</td></tr>
+        <tr><td><code>epm tree</code></td><td>Show the flat dependency tree</td></tr>
+        <tr><td><code>epm why &lt;package&gt;</code></td><td>Trace how a package is pulled in</td></tr>
+        <tr><td><code>epm shake [--dry-run]</code></td><td>Tree-shake installed packages</td></tr>
+        <tr><td><code>epm list</code></td><td>List installed packages in <code>elysium_modules/</code></td></tr>
+        <tr><td><code>epm login &lt;token&gt;</code></td><td>Store GitHub PAT for publish auth</td></tr>
+      </table>
+
+      <h3>Flat Dependency Resolution</h3>
+      <p>By default, EPM uses <strong>flat resolution</strong> — one version per package name. The algorithm walks all transitive dependencies, finds the highest semver version satisfying all constraints, and pins it in <code>elysium.lock</code>.</p>
+      <p>Use <code>--legacy</code> to allow multiple versions (first-come-first-served).</p>
+    </section>
+
+    <section id="manifest" class="content-section animate-on-scroll">
+      <h2>Project Manifest (<code>elysium.json</code>)</h2>
+      <p>The <code>elysium.json</code> at the project root defines the project metadata, dependencies, and build targets.</p>
+
+<pre><code>{
+    <span class="hl-str">"name"</span>: <span class="hl-str">"my-app"</span>,
+    <span class="hl-str">"version"</span>: <span class="hl-str">"1.0.0"</span>,
+    <span class="hl-str">"description"</span>: <span class="hl-str">"My Elysium app"</span>,
+    <span class="hl-str">"entry"</span>: <span class="hl-str">"main.ely"</span>,
+    <span class="hl-str">"license"</span>: <span class="hl-str">"MIT"</span>,
+    <span class="hl-str">"dependencies"</span>: {
+        <span class="hl-str">"http"</span>: <span class="hl-str">"^1.0.0"</span>,
+        <span class="hl-str">"json"</span>: <span class="hl-str">">=2.0.0"</span>
+    },
+    <span class="hl-str">"environments"</span>: {
+        <span class="hl-str">"local"</span>: <span class="hl-str">"local"</span>,
+        <span class="hl-str">"dev"</span>: <span class="hl-str">"dev"</span>,
+        <span class="hl-str">"test"</span>: <span class="hl-str">"test"</span>,
+        <span class="hl-str">"prod"</span>: <span class="hl-str">"prod"</span>
+    },
+    <span class="hl-str">"ui"</span>: {
+        <span class="hl-str">"browser"</span>: {
+            <span class="hl-str">"target"</span>: <span class="hl-str">"js"</span>   <span class="hl-comment">// "js" or "wasm" (WebAssembly for performance)</span>
+        }
+    },
+    <span class="hl-str">"ssr"</span>: {
+        <span class="hl-str">"enabled"</span>: <span class="hl-num">false</span>,
+        <span class="hl-str">"runtime"</span>: <span class="hl-str">"node"</span>  <span class="hl-comment">// "node", "deno", "bun", "elysium-server"</span>
+    }
+}</code></pre>
+
+      <p><strong>UI Config:</strong> <code>ui.browser.target</code> controls the browser compilation target. Set to <code>"wasm"</code> for WebAssembly (performance mode for heavy UI components). Future targets include <code>android</code> and <code>ios</code>.</p>
+      <p><strong>SSR Config:</strong> When <code>ssr.enabled</code> is <code>true</code>, the compiler produces server-rendered output for the specified runtime. Use this when your code targets a Node.js/Deno/Bun server environment.</p>
+    </section>
+
+    <section id="linter" class="content-section animate-on-scroll">
+      <h2>Linter</h2>
+      <p>The built-in linter checks for common issues and enforces documentation standards:</p>
+      <ul>
+        <li>Missing <code>/// Summary:</code> comments on public functions and types</li>
+        <li>Unused variables and imports</li>
+        <li>Unreachable code</li>
+        <li>Invalid <code>bc</code> assertion patterns</li>
+        <li>Incorrect environment stub configurations</li>
+      </ul>
+    </section>
+
+    <section id="highlighter" class="content-section animate-on-scroll">
+      <h2>Syntax Highlighting</h2>
+      <p>The compiler can output syntax-highlighted source in ANSI (terminal) or HTML format.</p>
+<pre><code><span class="hl-comment"># Highlight for terminal</span>
+elysium highlight app.ely --format ansi
+
+<span class="hl-comment"># Highlight as HTML (embed in docs)</span>
+elysium highlight app.ely --format html &gt; app.html</code></pre>
+    </section>
+
+    <section id="codegen" class="content-section animate-on-scroll">
+      <h2>Documentation Generation</h2>
+      <p>Generate documentation from enforced <code>/// Summary:</code> doc comments.</p>
+<pre><code>elysium doc app.ely    <span class="hl-comment"># Generate documentation</span>
+elysium deps app.ely   <span class="hl-comment"># Show dependency graph</span></code></pre>
+      <p>Elysium also supports a <strong>TypeScript/JavaScript porting tool</strong>:</p>
+<pre><code>elysium port app.js    <span class="hl-comment"># Port JS/TS to Elysium</span></code></pre>
+    </section>
+
+    <section id="stub-env" class="content-section animate-on-scroll">
+      <h2>Environment Filtering</h2>
+      <p>Stub functions can be restricted to specific environments. This is useful for mocking during development without affecting production builds.</p>
+
+<pre><code><span class="hl-comment">// Only available during local development</span>
+<span class="hl-kw">func</span> <span class="hl-fn">mockDatabase</span>() <span class="hl-op">-&gt;</span> <span class="hl-type">Data</span> <span class="hl-kw">stub</span>: [local, dev]
+
+<span class="hl-comment">// Available everywhere</span>
+<span class="hl-kw">func</span> <span class="hl-fn">genericStub</span>() <span class="hl-op">-&gt;</span> <span class="hl-type">String</span> <span class="hl-kw">stub</span></code></pre>
+
+      <p>Supported built-in environments: <code>local</code> (default), <code>dev</code>, <code>test</code>, <code>prod</code>. Custom aliases can be defined in <code>elysium.json</code>.</p>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>Elysium 2.0 &middot; <a href="https://github.com/imstevetran/elysium">GitHub</a></p>
+  </footer>
+  <script src="../assets/js/main.js"></script>
+</body>
+</html>

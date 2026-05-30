@@ -32,11 +32,15 @@
   ],
   "scripts": {
     "postinstall": "node scripts/install.js",
-    "build-binaries": "node scripts/build-binaries.js"
+    "build-binaries": "node scripts/build-binaries.js",
+    "release": "bash ../scripts/release.sh"
   },
   "engines": {
     "node": ">=16.0.0"
   },
   "os": ["darwin", "linux", "win32"],
-  "cpu": ["x64", "arm64"]
+  "cpu": ["x64", "arm64"],
+  "publishConfig": {
+    "access": "public"
+  }
 }

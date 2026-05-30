@@ -30,6 +30,7 @@ impl<'a> Parser<'a> {
                 || self.peek_is(&Token::Var)
                 || self.peek_is(&Token::Func)
                 || self.peek_is(&Token::Async)
+                || self.peek_is(&Token::Schedule)
                 || self.peek_is(&Token::Class)
                 || self.peek_is(&Token::Enum)
                 || self.peek_is(&Token::Component)
@@ -65,6 +66,7 @@ impl<'a> Parser<'a> {
                 } else {
                     // Check if we have a function/class/etc — these are items
                     if self.peek_is(&Token::Func) || self.peek_is(&Token::Async)
+                        || self.peek_is(&Token::Schedule)
                         || self.peek_is(&Token::Class) || self.peek_is(&Token::Enum)
                         || self.peek_is(&Token::Component) || self.peek_is(&Token::Typealias)
                         || self.peek_is(&Token::Import)
@@ -95,6 +97,7 @@ impl<'a> Parser<'a> {
                     is_async: false,
                     is_private: false,
                     is_lazy: false,
+                    schedule_expr: None,
                     doc_comment: None,
                     bc_reason: None,
                     stub_envs: None,
@@ -109,10 +112,12 @@ impl<'a> Parser<'a> {
     // ==================== ITEMS ====================
 
     fn parse_item(&mut self) -> Result<Node<Item>> {
-        if self.peek_is(&Token::Func) {
-            self.parse_func_def(false, false)
+        if self.peek_is(&Token::Schedule) {
+            self.parse_scheduled_func_def()
+        } else if self.peek_is(&Token::Func) {
+            self.parse_func_def(false, false, None)
         } else if self.peek_is(&Token::Async) {
-            self.parse_async_func_def(false, false)
+            self.parse_async_func_def(false, false, None)
         } else if self.peek_is(&Token::Private) || self.peek_is(&Token::Lazy) {
             self.parse_func_or_class_with_mods()
         } else if self.peek_is(&Token::Class) {
@@ -127,12 +132,29 @@ impl<'a> Parser<'a> {
             self.parse_import()
         } else if self.peek_is(&Token::Spec) || self.peek_is(&Token::Describe) {
             self.parse_spec()
+        } else if self.peek_is(&Token::Worker) {
+            self.parse_worker_def()
         } else {
             Err(self.error("expected a top-level definition"))
         }
     }
 
+    /// Parse: `schedule "cron_expr" func name(...) { ... }`
+    fn parse_scheduled_func_def(&mut self) -> Result<Node<Item>> {
+        self.advance(); // "schedule"
+        let (_, cron_expr) = self.expect_string()?;
+        // Now expect func or async func
+        if self.peek_is(&Token::Func) {
+            self.parse_func_def(false, false, Some(cron_expr))
+        } else if self.peek_is(&Token::Async) {
+            self.parse_async_func_def(false, false, Some(cron_expr))
+        } else {
+            Err(self.error("expected `func` or `async func` after schedule expression"))
+        }
+    }
+
     /// Parse optional `private` and `lazy` modifiers before a `func`, `async func`, or `class`.
+    /// Also handles `schedule` keyword.
     fn parse_func_or_class_with_mods(&mut self) -> Result<Node<Item>> {
         let mut is_private = false;
         let mut is_lazy = false;
@@ -148,9 +170,9 @@ impl<'a> Parser<'a> {
             }
         }
         if self.peek_is(&Token::Func) {
-            self.parse_func_def(is_private, is_lazy)
+            self.parse_func_def(is_private, is_lazy, None)
         } else if self.peek_is(&Token::Async) {
-            self.parse_async_func_def(is_private, is_lazy)
+            self.parse_async_func_def(is_private, is_lazy, None)
         } else if self.peek_is(&Token::Class) {
             // private class (class-level access control noted but not enforced at runtime)
             self.parse_class_def()
@@ -159,7 +181,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_func_def(&mut self, is_private: bool, is_lazy: bool) -> Result<Node<Item>> {
+    fn parse_func_def(&mut self, is_private: bool, is_lazy: bool, schedule_expr: Option<String>) -> Result<Node<Item>> {
         let start = self.advance_span_start(); // "func"
         let name = self.expect_identifier()?;
         self.expect(&Token::LParen)?;
@@ -178,6 +200,7 @@ impl<'a> Parser<'a> {
                 is_async: false,
                 is_private,
                 is_lazy,
+                schedule_expr,
                 doc_comment: None,
                 bc_reason,
                 stub_envs,
@@ -186,7 +209,7 @@ impl<'a> Parser<'a> {
         ))
     }
 
-    fn parse_async_func_def(&mut self, is_private: bool, is_lazy: bool) -> Result<Node<Item>> {
+    fn parse_async_func_def(&mut self, is_private: bool, is_lazy: bool, schedule_expr: Option<String>) -> Result<Node<Item>> {
         let start = self.advance_span_start(); // "async"
         self.expect(&Token::Func)?;
         let name = self.expect_identifier()?;
@@ -205,6 +228,7 @@ impl<'a> Parser<'a> {
                 is_async: true,
                 is_private,
                 is_lazy,
+                schedule_expr,
                 doc_comment: None,
                 bc_reason: None,
                 stub_envs,
@@ -466,6 +490,7 @@ impl<'a> Parser<'a> {
                     is_async: false,
                     is_private,
                     is_lazy,
+                    schedule_expr: None,
                     doc_comment: None,
                     bc_reason: None,
                     stub_envs: None,
@@ -473,7 +498,7 @@ impl<'a> Parser<'a> {
                 crate::error::SourceSpan::new(0, end),
             ))
         } else {
-            self.parse_func_def(is_private, is_lazy)
+            self.parse_func_def(is_private, is_lazy, None)
         }
     }
 
@@ -582,6 +607,27 @@ impl<'a> Parser<'a> {
                 params: vec![],
                 state_vars,
                 body,
+            }),
+            crate::error::SourceSpan::new(start, end - start),
+        ))
+    }
+
+    fn parse_worker_def(&mut self) -> Result<Node<Item>> {
+        let start = self.advance_span_start(); // "worker"
+        let name = self.expect_identifier()?;
+        self.expect(&Token::LParen)?;
+        let params = self.parse_params()?;
+        self.expect(&Token::RParen)?;
+        self.expect(&Token::LBrace)?;
+        let stmts = self.parse_statements_until_rbrace()?;
+        self.expect(&Token::RBrace)?;
+        let (_, end) = self.last_span();
+        Ok(Node::new(
+            Item::Worker(WorkerDef {
+                name,
+                params,
+                body: Block { statements: stmts },
+                doc_comment: None,
             }),
             crate::error::SourceSpan::new(start, end - start),
         ))
@@ -734,6 +780,10 @@ impl<'a> Parser<'a> {
             self.parse_question_stmt()
         } else if self.peek_is(&Token::Bench) || self.peek_is(&Token::Bm) {
             self.parse_bench_stmt()
+        } else if self.peek_is(&Token::Parallel) {
+            self.parse_parallel_block()
+        } else if self.peek_is(&Token::Wait) {
+            self.parse_wait_stmt()
         } else {
             self.parse_expr_stmt()
         }
@@ -848,6 +898,24 @@ impl<'a> Parser<'a> {
 
         Ok(Node::new(
             Stmt::Expr(Box::new(Node::new(expr, crate::error::SourceSpan::new(start, end - start)))),
+            crate::error::SourceSpan::new(start, end - start),
+        ))
+    }
+
+    fn parse_parallel_block(&mut self) -> Result<Node<Stmt>> {
+        let start = self.advance_span_start(); // "parallel"
+        self.expect(&Token::LBrace)?;
+        let mut items = Vec::new();
+        while !self.peek_is(&Token::RBrace) && self.pos < self.tokens.len() {
+            items.push(self.parse_stmt()?);
+        }
+        self.expect(&Token::RBrace)?;
+        let (_, end) = self.last_span();
+        Ok(Node::new(
+            Stmt::Parallel(Box::new(Node::new(
+                ParallelBlock { items },
+                crate::error::SourceSpan::new(start, end - start),
+            ))),
             crate::error::SourceSpan::new(start, end - start),
         ))
     }
@@ -1191,6 +1259,19 @@ impl<'a> Parser<'a> {
         ))
     }
 
+    fn parse_wait_stmt(&mut self) -> Result<Node<Stmt>> {
+        let start = self.advance_span_start(); // "wait"
+        let (_, millis) = self.expect_int()?;
+        let (_, end) = self.last_span();
+        Ok(Node::new(
+            Stmt::Wait(Box::new(Node::new(
+                Wait { millis: millis as u64 },
+                crate::error::SourceSpan::new(start, end - start),
+            ))),
+            crate::error::SourceSpan::new(start, end - start),
+        ))
+    }
+
     // ==================== EXPRESSIONS ====================
 
     pub fn parse_expr(&mut self) -> Result<Expr> {
@@ -1310,6 +1391,14 @@ impl<'a> Parser<'a> {
                 op: BinaryOpKind::Ge,
                 left: Box::new(Node::new(left, crate::error::SourceSpan::new(0, 0))),
                 right: Box::new(Node::new(right, crate::error::SourceSpan::new(0, 0))),
+            })
+        } else if self.peek_is(&Token::Is) {
+            self.advance(); // "is"
+            let type_name = self.expect_identifier()?;
+            let (_, end) = self.last_span();
+            Ok(Expr::Is {
+                value: Box::new(Node::new(left, crate::error::SourceSpan::new(0, 0))),
+                type_name,
             })
         } else {
             Ok(left)
@@ -1512,6 +1601,9 @@ impl<'a> Parser<'a> {
         } else if self.peek_is(&Token::Nil) {
             let (start, _) = self.expect_token(&Token::Nil)?;
             Ok(Expr::Literal(Node::new(Literal::Nil, crate::error::SourceSpan::new(start, 3))))
+        } else if self.peek_is(&Token::Worker) {
+            self.advance();
+            Ok(Expr::Identifier("worker".to_string()))
         } else if self.is_identifier() {
             let name = self.expect_identifier()?;
             // Check for lambda
@@ -1529,6 +1621,10 @@ impl<'a> Parser<'a> {
             } else {
                 Ok(Expr::Identifier(name))
             }
+        } else if self.peek_is(&Token::Await) {
+            self.advance(); // "await"
+            let expr = self.parse_expr()?;
+            Ok(Expr::Await(Box::new(Node::new(expr, crate::error::SourceSpan::new(0, 0)))))
         } else if self.peek_is(&Token::LParen) {
             self.advance(); // "("
             // Check for lambda with param list
@@ -1637,8 +1733,43 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_block_expr(&mut self) -> Result<Expr> {
+        // Check if this looks like a record/JSON literal: `{"key": value, ...}`
+        // Heuristic: if the token after `{` is a string literal followed by colon, it's a record.
+        let next_idx = self.pos + 1;
+        if next_idx + 1 < self.tokens.len() {
+            let next = &self.tokens[next_idx].1;
+            let next_next = &self.tokens[next_idx + 1].1;
+            let is_string = matches!(next, Token::StringLiteral(_) | Token::BacktickString(_));
+            let is_colon = matches!(next_next, Token::Colon);
+            if is_string && is_colon {
+                return self.parse_record_literal();
+            }
+        }
         let block = self.parse_block()?;
         Ok(Expr::Block(block))
+    }
+
+    /// Parse a record/JSON literal: `{ "key1": expr1, "key2": expr2 }`
+    fn parse_record_literal(&mut self) -> Result<Expr> {
+        self.advance(); // consume "{"
+        let mut fields = Vec::new();
+        while !self.peek_is(&Token::RBrace) && self.pos < self.tokens.len() {
+            // Parse key
+            let is_str = matches!(&self.tokens.get(self.pos).map(|t| &t.1), Some(Token::StringLiteral(_)) | Some(Token::BacktickString(_)));
+            if !is_str {
+                return Err(self.error("expected string key in record literal"));
+            }
+            let (_, key) = self.expect_string()?;
+            self.expect(&Token::Colon)?;
+            let value = self.parse_expr()?;
+            fields.push((key, Node::new(value, crate::error::SourceSpan::new(0, 0))));
+            // Optional comma
+            if self.peek_is(&Token::Comma) {
+                self.advance(); // ","
+            }
+        }
+        self.expect(&Token::RBrace)?;
+        Ok(Expr::Record(fields))
     }
 
     // ==================== TOKEN HELPERS ====================
@@ -1710,6 +1841,11 @@ impl<'a> Parser<'a> {
             (Token::Private, Token::Private) => true,
             (Token::Lazy, Token::Lazy) => true,
             (Token::Switch, Token::Switch) => true,
+            (Token::Parallel, Token::Parallel) => true,
+            (Token::Schedule, Token::Schedule) => true,
+            (Token::Wait, Token::Wait) => true,
+            (Token::Worker, Token::Worker) => true,
+            (Token::Is, Token::Is) => true,
             (Token::Assign, Token::Assign) => true,
             (Token::Plus, Token::Plus) => true,
             (Token::Minus, Token::Minus) => true,
@@ -1764,7 +1900,7 @@ impl<'a> Parser<'a> {
 
     fn is_string_lit(&self) -> bool {
         if self.pos >= self.tokens.len() { return false; }
-        matches!(self.tokens[self.pos].1, Token::StringLiteral(_))
+        matches!(self.tokens[self.pos].1, Token::StringLiteral(_) | Token::BacktickString(_))
     }
 
     fn is_char_lit(&self) -> bool {
@@ -1830,6 +1966,9 @@ impl<'a> Parser<'a> {
             | (Token::Bench, Token::Bench) | (Token::Bm, Token::Bm)
             | (Token::Stub, Token::Stub)
             | (Token::Private, Token::Private) | (Token::Lazy, Token::Lazy) | (Token::Switch, Token::Switch)
+            | (Token::Parallel, Token::Parallel)
+            | (Token::Schedule, Token::Schedule) | (Token::Wait, Token::Wait)
+            | (Token::Worker, Token::Worker) | (Token::Is, Token::Is)
             | (Token::Assign, Token::Assign) | (Token::Plus, Token::Plus)
             | (Token::Minus, Token::Minus) | (Token::Star, Token::Star)
             | (Token::Slash, Token::Slash) | (Token::Percent, Token::Percent)
@@ -1850,6 +1989,7 @@ impl<'a> Parser<'a> {
             | (Token::IntLiteral(_), Token::IntLiteral(_))
             | (Token::FloatLiteral(_), Token::FloatLiteral(_))
             | (Token::StringLiteral(_), Token::StringLiteral(_))
+            | (Token::BacktickString(_), Token::BacktickString(_))
             | (Token::CharLiteral(_), Token::CharLiteral(_)) => true,
             _ => false,
         }
@@ -1867,6 +2007,14 @@ impl<'a> Parser<'a> {
                     let name = name.clone();
                     self.pos += 1;
                     Ok(name)
+                }
+                Token::Worker => {
+                    self.pos += 1;
+                    Ok("worker".to_string())
+                }
+                Token::Wait => {
+                    self.pos += 1;
+                    Ok("wait".to_string())
                 }
                 other => Err(self.error(&format!("expected identifier, got {:?}", other))),
             }
@@ -1911,6 +2059,12 @@ impl<'a> Parser<'a> {
         if self.pos < self.tokens.len() {
             match &self.tokens[self.pos].1 {
                 Token::StringLiteral(val) => {
+                    let start = self.tokens[self.pos].0;
+                    let val = val.clone();
+                    self.pos += 1;
+                    Ok((start, val))
+                }
+                Token::BacktickString(val) => {
                     let start = self.tokens[self.pos].0;
                     let val = val.clone();
                     self.pos += 1;
@@ -2326,6 +2480,62 @@ mod tests {
                 assert_eq!(m.value.arms.len(), 2);
             }
             _ => panic!("expected Match"),
+        }
+    }
+
+    // ----- Parallel Block -----
+
+    #[test]
+    fn test_parse_parallel_block() {
+        let prog = parse("func f() {\n    parallel {\n        print(1)\n        print(2)\n    }\n}");
+        let stmts = get_body_stmts(&prog.items[0].value);
+        match &stmts[0].value {
+            Stmt::Parallel(pb) => {
+                assert_eq!(pb.value.items.len(), 2);
+            }
+            other => panic!("expected Parallel, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_parallel_empty() {
+        let prog = parse("func f() {\n    parallel {\n    }\n}");
+        let stmts = get_body_stmts(&prog.items[0].value);
+        match &stmts[0].value {
+            Stmt::Parallel(pb) => {
+                assert_eq!(pb.value.items.len(), 0);
+            }
+            other => panic!("expected Parallel, got {:?}", other),
+        }
+    }
+
+    // ----- Await Expression -----
+
+    #[test]
+    fn test_parse_await_expr() {
+        let prog = parse("async func f() {\n    let x = await foo()\n}");
+        let stmts = get_body_stmts(&prog.items[0].value);
+        match &stmts[0].value {
+            Stmt::Let(l) => {
+                if let Some(val) = &l.value.value {
+                    assert!(matches!(val, Expr::Await(_)));
+                } else {
+                    panic!("expected value");
+                }
+            }
+            other => panic!("expected Let, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_await_basic() {
+        let stmt = parse_stmt("let x = await getData()");
+        match &stmt {
+            Stmt::Let(l) => {
+                assert!(l.value.value.is_some());
+                assert!(matches!(l.value.value.as_ref().unwrap(), Expr::Await(_)));
+            }
+            other => panic!("expected Let, got {:?}", other),
         }
     }
 }

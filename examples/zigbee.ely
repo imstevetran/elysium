@@ -1,0 +1,41 @@
+// Zigbee home automation example
+// Demonstrates network setup, device discovery, and device control.
+//
+// Usage: ely check examples/zigbee.ely
+
+import "#/zigbee" as zigbee
+
+func main() {
+    // Initialize the Zigbee coordinator
+    zigbee.start()
+
+    // Join a network (or scan for one)
+    zigbee.permitJoin(60)
+
+    // Check if we're on a network
+    print("Joined: " + zigbee.isJoined())
+
+    // Read network info
+    let panId = zigbee.getPanId()
+    let channel = zigbee.getChannel()
+    print("PAN ID: " + panId + " Channel: " + channel)
+
+    // Turn a light on (device ieeeAddr, endpoint, cluster)
+    zigbee.on("00:17:88:01:02:03:04:05", 1, "genOnOff")
+
+    // Read a temperature attribute
+    let temp = zigbee.readAttribute("00:17:88:01:02:03:04:05", 1, "msTemperatureMeasurement", "measuredValue")
+    print("Temperature: " + temp)
+
+    // Toggle a light
+    zigbee.toggle("00:17:88:01:02:03:04:05", 1, "genOnOff")
+
+    // Turn it off
+    zigbee.off("00:17:88:01:02:03:04:05", 1, "genOnOff")
+
+    // Add device to a group
+    zigbee.addToGroup("00:17:88:01:02:03:04:05", 1)
+
+    // Shutdown
+    zigbee.shutdown()
+}

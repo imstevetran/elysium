@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HTTP Requests — Elysium Recipes</title>
+  <meta name="description" content="Fetch data from APIs using HTTP GET, POST, PUT, and DELETE in Elysium." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../assets/css/style.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>⚡</text></svg>" />
+</head>
+<body>
+  <header class="navbar">
+    <a href="../" class="logo"><svg viewBox="0 0 28 28" fill="none"><rect x="2" y="2" width="24" height="24" rx="6" stroke="%236c63ff" stroke-width="2" /><text x="14" y="20" text-anchor="middle" font-size="16" font-weight="bold" fill="%236c63ff">E</text></svg><span>Elysium</span></a>
+    <button class="menu-toggle" aria-label="Toggle menu"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
+    <nav>
+      <a href="../guide/">Guide</a>
+      <a href="../ui/">UI</a>
+      <a href="../std/">Std Lib</a>
+      <a href="../spec/">Spec</a>
+      <a href="../tooling/">Tooling</a>
+      <a href="../recipes/" class="active">Recipes</a>
+    </nav>
+  </header>
+  <main class="main">
+    <div class="breadcrumbs"><a href="../">Home</a> / <a href="./">Recipes</a> / <span>HTTP Requests</span></div>
+    <div class="page-header">
+      <h1>HTTP Requests</h1>
+      <p>Fetch data from REST APIs using GET, POST, PUT, and DELETE. <span class="tag diff-intermediate">Intermediate</span></p>
+    </div>
+    <section class="content-section animate-on-scroll">
+      <h2>HTTP Methods</h2>
+<div class="code-header"><span>transport_http.ely</span></div>
+<pre><code><span class="hl-kw">func</span> <span class="hl-fn">main</span>() {
+    <span class="hl-comment">// GET — fetch data</span>
+    <span class="hl-kw">let</span> data = transport.get(<span class="hl-str">"https://api.example.com/data"</span>)
+    print(data)
+
+    <span class="hl-comment">// POST — create a resource</span>
+    transport.post(<span class="hl-str">"https://api.example.com/data"</span>,
+        <span class="hl-str">"{\"key\":\"value\"}"</span>)
+
+    <span class="hl-comment">// PUT — update a resource</span>
+    transport.put(<span class="hl-str">"https://api.example.com/data/1"</span>,
+        <span class="hl-str">"{\"key\":\"updated\"}"</span>)
+
+    <span class="hl-comment">// DELETE — remove a resource</span>
+    transport.delete(<span class="hl-str">"https://api.example.com/data/1"</span>)
+}</code></pre>
+    </section>
+    <section class="content-section animate-on-scroll">
+      <h2>WebSocket</h2>
+<div class="code-header"><span>transport_ws.ely</span></div>
+<pre><code><span class="hl-kw">let</span> ws = transport.wsConnect(<span class="hl-str">"wss://echo.example.com"</span>)
+transport.wsSend(ws, <span class="hl-str">"hello from Elysium"</span>)
+transport.wsClose(ws)</code></pre>
+    </section>
+    <section class="content-section animate-on-scroll">
+      <h2>MQTT</h2>
+<div class="code-header"><span>transport_mqtt.ely</span></div>
+<pre><code><span class="hl-kw">let</span> client = transport.mqttConnect(
+    <span class="hl-str">"mqtt://broker.example.com"</span>,
+    <span class="hl-str">"elysium-client"</span>)
+transport.mqttPublish(client, <span class="hl-str">"topic/hello"</span>, <span class="hl-str">"world"</span>)
+transport.mqttSubscribe(client, <span class="hl-str">"topic/#"</span>)
+transport.mqttDisconnect(client)</code></pre>
+    </section>
+    <section class="content-section animate-on-scroll">
+      <h2>Backend Details</h2>
+      <ul>
+        <li><strong>C backend</strong>: HTTP uses <code>curl</code> via <code>snprintf("curl -s -m 10 '%s'", url)</code> + <code>popen</code>. WebSocket &amp; MQTT print stub messages — they require the JS runtime for full support.</li>
+        <li><strong>JS runtime</strong>: HTTP via native <code>fetch</code> (Node 18+ / browser), WebSocket via <code>WebSocket</code> API, MQTT via <code>mqtt</code> package.</li>
+      </ul>
+    </section>
+  </main>
+  <footer class="footer"><p>Elysium 2.0 &middot; <a href="https://github.com/imstevetran/elysium">GitHub</a></p></footer>
+  <script src="../assets/js/main.js"></script>
+</body>
+</html>

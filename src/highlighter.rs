@@ -58,10 +58,12 @@ fn token_kind(tok: &Token) -> Option<SpanKind> {
         | Token::Bench | Token::Bm
         | Token::Stub
         | Token::Private | Token::Lazy | Token::Switch
-        | Token::True | Token::False | Token::Nil => Some(SpanKind::Keyword),
+        | Token::True | Token::False | Token::Nil
+        | Token::Parallel | Token::Schedule | Token::Wait | Token::Worker
+        | Token::Is => Some(SpanKind::Keyword),
 
         // String literals
-        Token::StringLiteral(_) => Some(SpanKind::String),
+        Token::StringLiteral(_) | Token::BacktickString(_) => Some(SpanKind::String),
         Token::CharLiteral(_) => Some(SpanKind::String),
 
         // Numbers

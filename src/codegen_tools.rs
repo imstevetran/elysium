@@ -110,6 +110,7 @@ fn collect_calls_in_expr(expr: &Expr, calls: &mut HashSet<String>) {
         Expr::Spread(inner) => collect_calls_in_expr(&inner.value, calls),
         Expr::BcAnnotation { expr, .. } => collect_calls_in_expr(&expr.value, calls),
         Expr::ErrorPropagate(inner) => collect_calls_in_expr(&inner.value, calls),
+        Expr::Await(inner) => collect_calls_in_expr(&inner.value, calls),
         Expr::MatchExpression { value, arms } => {
             collect_calls_in_expr(&value.value, calls);
             for arm in arms { collect_calls_in_block(&arm.body, calls); }
@@ -179,9 +180,14 @@ fn collect_calls_in_stmt(stmt: &Stmt, calls: &mut HashSet<String>) {
         Stmt::Expect(expect) => {
             collect_calls_in_expr(&expect.value.expr.value, calls);
         }
-        Stmt::Todo(_) | Stmt::Question(_) => {},
+        Stmt::Todo(_) | Stmt::Question(_) | Stmt::Wait(_) => {},
         Stmt::Bench(boxed) => {
             collect_calls_in_block(&boxed.value.body, calls);
+        }
+        Stmt::Parallel(boxed) => {
+            for item in &boxed.value.items {
+                collect_calls_in_stmt(&item.value, calls);
+            }
         }
     }
 }
@@ -265,6 +271,9 @@ pub fn generate_doc(source: &str, program: &Program) -> String {
                     writeln!(out, "- feat `{}`", feat.name).ok();
                 }
                 out.push_str("\n");
+            }
+            Item::Worker(w) => {
+                writeln!(out, "### Worker `{}`\n", w.name).ok();
             }
         }
     }

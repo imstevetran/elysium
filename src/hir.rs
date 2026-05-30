@@ -11,6 +11,16 @@ pub struct HirProgram {
 #[derive(Debug, Clone)]
 pub enum HirItem {
     Function(HirFunction),
+    Worker(HirWorker),
+}
+
+/// A lowered worker definition.
+#[derive(Debug, Clone)]
+pub struct HirWorker {
+    pub name: String,
+    pub params: Vec<HirParam>,
+    pub body: HirBlock,
+    pub line: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -22,6 +32,7 @@ pub struct HirFunction {
     pub is_async: bool,
     pub is_lazy: bool,
     pub is_private: bool,
+    pub schedule_expr: Option<String>,
     pub line: u32,
 }
 
@@ -79,6 +90,11 @@ pub enum HirStmt {
         line: u32,
     },
     Bench(HirBlock, u32),
+    Wait(u64, u32),
+    Parallel {
+        blocks: Vec<HirBlock>,
+        line: u32,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -136,6 +152,7 @@ pub enum HirExpr {
         expr: Box<HirExpr>,
         reason: String,
     },
+    Await(Box<HirExpr>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -181,6 +198,9 @@ impl<'a> Lowerer<'a> {
                         items.push(HirItem::Function(self.lower_function(method)));
                     }
                 }
+                A::Item::Worker(w) => {
+                    items.push(HirItem::Worker(self.lower_worker(w)));
+                }
                 _ => {}
             }
         }
@@ -203,6 +223,7 @@ impl<'a> Lowerer<'a> {
             is_async: f.is_async,
             is_lazy: f.is_lazy,
             is_private: f.is_private,
+            schedule_expr: f.schedule_expr.clone(),
             line,
         }
     }
@@ -242,6 +263,20 @@ impl<'a> Lowerer<'a> {
         }
     }
 
+    fn lower_worker(&mut self, w: &A::WorkerDef) -> HirWorker {
+        let line = self.line_of(&w.body.statements.first().map(|s| s.span.clone()).unwrap_or(SourceSpan::new(0, 0)));
+        HirWorker {
+            name: w.name.clone(),
+            params: w.params.iter().map(|p| HirParam {
+                name: p.name.clone(),
+                ty: p.type_ann.as_ref().map(|t| self.lower_type_expr(t)).unwrap_or(HirType::Named("infer".into())),
+                is_rest: p.is_rest,
+            }).collect(),
+            body: self.lower_block(&w.body),
+            line,
+        }
+    }
+
     fn lower_block(&mut self, block: &A::Block) -> HirBlock {
         let first_line = block.statements.first()
             .map(|s| self.line_of(&s.span))
@@ -249,6 +284,14 @@ impl<'a> Lowerer<'a> {
         HirBlock {
             stmts: block.statements.iter().map(|s| self.lower_stmt(s)).collect(),
             first_line,
+        }
+    }
+
+    fn lower_block_inline(&mut self, stmt: &A::Node<A::Stmt>) -> HirBlock {
+        let line = self.line_of(&stmt.span);
+        HirBlock {
+            stmts: vec![self.lower_stmt(stmt)],
+            first_line: line,
         }
     }
 
@@ -350,6 +393,11 @@ impl<'a> Lowerer<'a> {
             A::Stmt::Todo(_) => HirStmt::Expr(HirExpr::NilLit, line),
             A::Stmt::Question(_) => HirStmt::Expr(HirExpr::NilLit, line),
             A::Stmt::Bench(boxed) => HirStmt::Bench(self.lower_block(&boxed.value.body), line),
+            A::Stmt::Wait(boxed) => HirStmt::Wait(boxed.value.millis, line),
+            A::Stmt::Parallel(boxed) => {
+                let blocks = boxed.value.items.iter().map(|s| self.lower_block_inline(s)).collect();
+                HirStmt::Parallel { blocks, line }
+            },
         }
     }
 
@@ -459,6 +507,11 @@ impl<'a> Lowerer<'a> {
                 }],
                 first_line: self.line_of(&value.span),
             }),
+            A::Expr::Await(boxed) => HirExpr::Await(Box::new(self.lower_expr(&boxed.value))),
+            A::Expr::Is { value, .. } => {
+                // Is should be desugared before HIR lowering, but handle gracefully
+                self.lower_expr(&value.value)
+            }
         }
     }
 }
@@ -477,6 +530,7 @@ mod tests {
     fn last_func(prog: &HirProgram) -> &HirFunction {
         prog.items.last().map(|i| match i {
             HirItem::Function(f) => f,
+            HirItem::Worker(_) => panic!("expected function, got worker"),
         }).expect("no functions")
     }
 

@@ -103,6 +103,16 @@ pub enum Token {
     Private,
     #[token("lazy")]
     Lazy,
+    #[token("parallel")]
+    Parallel,
+    #[token("schedule")]
+    Schedule,
+    #[token("wait")]
+    Wait,
+    #[token("worker")]
+    Worker,
+    #[token("is")]
+    Is,
 
     // Literals
     #[regex("[0-9]+", |lex| lex.slice().parse().ok())]
@@ -114,6 +124,13 @@ pub enum Token {
         Some(s[1..s.len()-1].to_string())
     })]
     StringLiteral(String),
+    /// Backtick strings: multi-line, can contain " but not backticks.
+    /// E.g. `{"key": "value", "nested": [1, 2]}`
+    #[regex(r#"`[^`]*`"#, |lex| {
+        let s = lex.slice();
+        Some(s[1..s.len()-1].to_string())
+    })]
+    BacktickString(String),
     #[regex(r#"'[^']'"#, |lex| {
         let s = lex.slice().as_bytes();
         Some(s[1] as char)
@@ -362,5 +379,20 @@ mod tests {
         let toks = tokenize(r#"question "why is this here?""#);
         assert_eq!(toks[0], Token::KwQuestion);
         assert_token!(toks[1], Token::StringLiteral(_));
+    }
+
+    #[test]
+    fn test_lex_parallel_keyword() {
+        let toks = tokenize("parallel");
+        assert_eq!(toks.len(), 1);
+        assert_eq!(toks[0], Token::Parallel);
+    }
+
+    #[test]
+    fn test_lex_parallel_block() {
+        let toks = tokenize("parallel {\n    print(1)\n}");
+        let keywords: Vec<&Token> = toks.iter().filter(|t| matches!(t, Token::Parallel)).collect();
+        assert_eq!(keywords.len(), 1);
+        assert_eq!(*keywords[0], Token::Parallel);
     }
 }

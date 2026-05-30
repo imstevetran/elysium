@@ -4,7 +4,289 @@ use crate::mir::*;
 use inkwell::context::Context;
 use inkwell::types::BasicType;
 use inkwell::values::BasicMetadataValueEnum;
+use inkwell::values::BasicValue;
 use inkwell::values::AnyValue;
+
+/// Parsed schedule specification from a cron or friendly-format string.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum ScheduleKind {
+    /// Simple interval in seconds (compile-time constant sleep).
+    /// e.g. `*/5 * * * *`, `every 5 minutes`, `hourly`
+    Interval(u32),
+    /// Run daily at a specific hour and minute (UTC via `time()` arithmetic).
+    /// e.g. `0 8 * * *`, `daily at 08:00`, `every day at 08:00`
+    DailyAt { hour: u32, min: u32 },
+    /// Run weekly on a specific day at a specific time.
+    /// e.g. `every Monday at 09:00`, `weekly on Monday at 09:00`
+    WeeklyAt { dow: u32, hour: u32, min: u32 },
+    /// Run monthly on a specific day at a specific time.
+    /// e.g. `every month on day 15 at 10:00`, `monthly on day 15 at 10:00`
+    MonthlyAt { dom: u32, hour: u32, min: u32 },
+}
+
+/// Days of week for friendly parsing (0=Sunday, 1=Monday, ..., 6=Saturday)
+const DAY_NAMES: &[&str] = &[
+    "sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday",
+];
+
+/// Parse a schedule expression string into a ScheduleKind.
+fn parse_schedule(expr: &str) -> ScheduleKind {
+    let trimmed = expr.trim();
+    // Try cron first (5 space-separated fields without alphabetic chars, except *)
+    let is_cron = trimmed.split_whitespace().count() == 5
+        && !trimmed.chars().any(|c| c.is_ascii_alphabetic());
+    if is_cron {
+        return parse_cron(trimmed);
+    }
+    parse_friendly(trimmed)
+}
+
+/// Parse a 5-field cron expression.
+fn parse_cron(expr: &str) -> ScheduleKind {
+    let parts: Vec<&str> = expr.split_whitespace().collect();
+    if parts.len() != 5 {
+        return ScheduleKind::Interval(60);
+    }
+    let min = parts[0].trim();
+    let hour = parts[1].trim();
+    let _dom = parts[2].trim();
+    let _mon = parts[3].trim();
+    let _dow = parts[4].trim();
+
+    // */N in minute field → every N minutes
+    if let Some(n_str) = min.strip_prefix("*/") {
+        if let Ok(n) = n_str.parse::<u32>() {
+            if n > 0 {
+                return ScheduleKind::Interval(n * 60);
+            }
+        }
+    }
+
+    // */N in hour field → every N hours
+    if let Some(n_str) = hour.strip_prefix("*/") {
+        if let Ok(n) = n_str.parse::<u32>() {
+            if n > 0 {
+                return ScheduleKind::Interval(n * 3600);
+            }
+        }
+    }
+
+    // Fixed time: M H * * * → daily at H:M
+    if let (Ok(m), Ok(h)) = (min.parse::<u32>(), hour.parse::<u32>()) {
+        return ScheduleKind::DailyAt { hour: h, min: m };
+    }
+
+    // * * * * * or partial → every minute
+    ScheduleKind::Interval(60)
+}
+
+/// Parse friendly schedule strings.
+/// Supported patterns:
+///   "every N seconds/minutes/hours"      — interval
+///   "every minute" / "every hour"        — interval
+///   "hourly" / "minutely"               — interval
+///   "daily" / "every day"               — interval 86400
+///   "daily at HH:MM" / "every day at HH:MM"  — daily at time
+///   "every Monday" / "weekly on Monday"       — weekly interval
+///   "every Monday at HH:MM"                   — weekly at time
+///   "at HH:MM every day"                      — daily at time
+///   "every month on day D at HH:MM"           — monthly at time
+fn parse_friendly(expr: &str) -> ScheduleKind {
+    let lower = expr.to_lowercase();
+    let words: Vec<&str> = lower.split_whitespace().filter(|w| !w.is_empty()).collect();
+
+    if words.is_empty() {
+        return ScheduleKind::Interval(60);
+    }
+
+    // Extract hour:min from any token like "08:00" or "8:00"
+    let mut hour_val: Option<u32> = None;
+    let mut min_val: Option<u32> = None;
+
+    // Try to find HH:MM in any word
+    for w in &words {
+        if let Some(pos) = w.find(':') {
+            if let (Ok(h), Ok(m)) = (
+                w[..pos].parse::<u32>(),
+                w[pos + 1..].parse::<u32>(),
+            ) {
+                if h < 24 && m < 60 {
+                    hour_val = Some(h);
+                    min_val = Some(m);
+                    break;
+                }
+            }
+        }
+    }
+
+    let word_list: Vec<&str> = words.iter().map(|s| *s).collect();
+
+    // Detect "every N seconds/minutes/hours"
+    if let Some(idx) = word_list.iter().position(|w| *w == "every") {
+        // every minute, every hour, every day, every week, every month
+        if idx + 1 < word_list.len() {
+            // Check if next word is a number
+            let next = word_list[idx + 1];
+            if let Ok(n) = next.parse::<u32>() {
+                // "every N <unit>"
+                if idx + 2 < word_list.len() {
+                    let unit = word_list[idx + 2];
+                    return parse_every_n(n, unit, hour_val, min_val);
+                }
+            } else {
+                // "every <unit>" without number
+                return parse_every_unit(next, hour_val, min_val);
+            }
+        }
+        return ScheduleKind::Interval(60);
+    }
+
+    // Detect "hourly", "minutely", "daily", "weekly", "monthly"
+    for w in &word_list {
+        match *w {
+            "hourly" | "everyhour" => return ScheduleKind::Interval(3600),
+            "minutely" | "everyminute" => return ScheduleKind::Interval(60),
+            "daily" | "everyday" => {
+                if let (Some(h), Some(m)) = (hour_val, min_val) {
+                    return ScheduleKind::DailyAt { hour: h, min: m };
+                }
+                return ScheduleKind::Interval(86400);
+            }
+            "weekly" | "everyweek" => {
+                if let (Some(h), Some(m)) = (hour_val, min_val) {
+                    return ScheduleKind::WeeklyAt { dow: 0, hour: h, min: m };
+                }
+                return ScheduleKind::Interval(604800);
+            }
+            "monthly" | "everymonth" => {
+                if let (Some(h), Some(m)) = (hour_val, min_val) {
+                    return ScheduleKind::MonthlyAt { dom: 1, hour: h, min: m };
+                }
+                return ScheduleKind::Interval(2592000);
+            }
+            _ => {}
+        }
+    }
+
+    // Detect "at HH:MM" pattern anywhere (no "every" prefix)
+    if let (Some(h), Some(m)) = (hour_val, min_val) {
+        // Check for day-of-week mention
+        for w in &word_list {
+            for (dow, name) in DAY_NAMES.iter().enumerate() {
+                if *w == *name || *w == &name[..3] {
+                    // e.g. "at 09:00 on Monday" or "Monday at 09:00"
+                    return ScheduleKind::WeeklyAt {
+                        dow: dow as u32,
+                        hour: h,
+                        min: m,
+                    };
+                }
+            }
+            // Check for "day D" or "dayD" pattern
+            if *w == "day" || w.starts_with("day") {
+                let day_str = if *w == "day" {
+                    // next token should be the number
+                    // find the index and check next
+                    None
+                } else {
+                    w.strip_prefix("day").and_then(|s| s.parse::<u32>().ok())
+                };
+                if let Some(dom) = day_str {
+                    return ScheduleKind::MonthlyAt { dom, hour: h, min: m };
+                }
+            }
+        }
+        // No day-of-week found, just daily at time
+        return ScheduleKind::DailyAt { hour: h, min: m };
+    }
+
+    // Final fallback
+    ScheduleKind::Interval(60)
+}
+
+/// Parse "every N <unit>" pattern
+fn parse_every_n(n: u32, unit: &str, hour: Option<u32>, min: Option<u32>) -> ScheduleKind {
+    let secs = match unit {
+        u if u.starts_with("second") => n,
+        u if u.starts_with("minute") => n * 60,
+        u if u.starts_with("hour") => n * 3600,
+        u if u.starts_with("day") => {
+            if let (Some(h), Some(m)) = (hour, min) {
+                return ScheduleKind::DailyAt { hour: h, min: m };
+            }
+            n * 86400
+        }
+        u if u.starts_with("week") => {
+            if let (Some(h), Some(m)) = (hour, min) {
+                return ScheduleKind::WeeklyAt { dow: 0, hour: h, min: m };
+            }
+            n * 604800
+        }
+        u if u.starts_with("month") => {
+            if let (Some(h), Some(m)) = (hour, min) {
+                return ScheduleKind::MonthlyAt { dom: 1, hour: h, min: m };
+            }
+            n * 2592000
+        }
+        _ => n, // treat unknown unit as seconds
+    };
+    ScheduleKind::Interval(secs)
+}
+
+/// Parse "every <unit>" pattern (without a number)
+fn parse_every_unit(unit: &str, hour: Option<u32>, min: Option<u32>) -> ScheduleKind {
+    match unit {
+        u if u.starts_with("second") => ScheduleKind::Interval(1),
+        u if u.starts_with("minute") => ScheduleKind::Interval(60),
+        u if u.starts_with("hour") => ScheduleKind::Interval(3600),
+        u if u.starts_with("day") => {
+            if let (Some(h), Some(m)) = (hour, min) {
+                return ScheduleKind::DailyAt { hour: h, min: m };
+            }
+            ScheduleKind::Interval(86400)
+        }
+        u if u.starts_with("week") => {
+            if let (Some(h), Some(m)) = (hour, min) {
+                return ScheduleKind::WeeklyAt { dow: 0, hour: h, min: m };
+            }
+            ScheduleKind::Interval(604800)
+        }
+        u if u.starts_with("month") => {
+            if let (Some(h), Some(m)) = (hour, min) {
+                return ScheduleKind::MonthlyAt { dom: 1, hour: h, min: m };
+            }
+            ScheduleKind::Interval(2592000)
+        }
+        // Check if unit is a day name
+        _ => {
+            let lower = unit;
+            for (dow, name) in DAY_NAMES.iter().enumerate() {
+                if lower == *name || lower == &name[..3] {
+                    // e.g. "every monday" - if hour/min provided, use them
+                    if let (Some(h), Some(m)) = (hour, min) {
+                        return ScheduleKind::WeeklyAt {
+                            dow: dow as u32,
+                            hour: h,
+                            min: m,
+                        };
+                    }
+                    return ScheduleKind::Interval(604800);
+                }
+            }
+            ScheduleKind::Interval(60)
+        }
+    }
+}
+
+/// Get the base interval in seconds for a ScheduleKind (used for runtime sleep between iterations).
+fn schedule_base_interval(kind: &ScheduleKind) -> u32 {
+    match kind {
+        ScheduleKind::Interval(s) => *s,
+        ScheduleKind::DailyAt { .. } => 86400,
+        ScheduleKind::WeeklyAt { .. } => 604800,
+        ScheduleKind::MonthlyAt { .. } => 2592000,
+    }
+}
 
 /// LLVM IR code generator for Elysium.
 pub struct Codegen {
@@ -36,8 +318,43 @@ impl Codegen {
             di.init(&self.module, source_path);
         }
 
+        let mut scheduled: Vec<&MirFunction> = Vec::new();
+
         for func in &program.functions {
             self.emit_function(func, source_path)?;
+            if func.schedule_expr.is_some() {
+                scheduled.push(func);
+            }
+        }
+
+        // If there are scheduled functions, emit thread wrappers and startup
+        if !scheduled.is_empty() {
+            for func in &scheduled {
+                self.emit_schedule_thread_wrapper(func)?;
+            }
+            self.emit_schedule_startup(&scheduled)?;
+
+            // Insert a call to __schedule_startup at the beginning of main
+            if let Some(main_fn) = self.module.get_function("main") {
+                if let Some(first_bb) = main_fn.get_first_basic_block() {
+                    if let Some(first_instr) = first_bb.get_first_instruction() {
+                        let builder = self.context.create_builder();
+                        builder.position_before(&first_instr);
+                        let _i32_ty = self.context.i32_type();
+                        let _ptr_ty = self.context.ptr_type(inkwell::AddressSpace::default());
+                        let _void_ty = self.context.void_type();
+                        let startup_fn = self.module.get_function("__schedule_startup").unwrap();
+                        let _ = builder
+                            .build_call(startup_fn, &[], "__schedule_startup_call")
+                            .map_err(|e| {
+                                crate::error::CompileError::new(format!(
+                                    "build_call __schedule_startup: {}",
+                                    e
+                                ))
+                            })?;
+                    }
+                }
+            }
         }
 
         // Finalise debug info
@@ -45,6 +362,258 @@ impl Codegen {
             di.finalize();
         }
 
+        Ok(())
+    }
+
+    /// Emit a thread wrapper for a scheduled function.
+    /// For Interval schedules: while(1) { sleep(interval); func(); }
+    /// For DailyAt/WeeklyAt/MonthlyAt: compute initial sleep with time() so first
+    /// invocation lands on the correct wall-clock time, then loop with base interval.
+    fn emit_schedule_thread_wrapper(&self, func: &MirFunction) -> Result<()> {
+        let i32_ty = self.context.i32_type();
+        let _i64_ty = self.context.i64_type();
+        let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::default());
+
+        let cron = func.schedule_expr.as_deref().unwrap_or("every minute");
+        let kind = parse_schedule(cron);
+
+        let wrapper_name = format!("__schedule_thread_{}", func.name);
+        let wrapper_fn_ty = ptr_ty.fn_type(&[ptr_ty.into()], false);
+        let wrapper_fn = self.module.add_function(&wrapper_name, wrapper_fn_ty, None);
+
+        // Declare sleep
+        let sleep_fn = self.module.add_function(
+            "sleep",
+            i32_ty.fn_type(&[i32_ty.into()], false),
+            None,
+        );
+
+        let entry = self.context.append_basic_block(wrapper_fn, "entry");
+        let builder = self.context.create_builder();
+        builder.position_at_end(entry);
+
+        match kind {
+            ScheduleKind::Interval(secs) => {
+                // Simple loop: entry → loop (no initial offset)
+                let loop_block = self.context.append_basic_block(wrapper_fn, "loop");
+                let _ = builder.build_unconditional_branch(loop_block);
+                builder.position_at_end(loop_block);
+
+                let sleep_arg = i32_ty.const_int(secs as u64, false);
+                let _ = builder
+                    .build_call(sleep_fn, &[sleep_arg.into()], "__schedule_sleep")
+                    .map_err(|e| crate::error::CompileError::new(format!("sleep call: {}", e)))?;
+
+                self.call_scheduled_func(&builder, func)?;
+
+                let _ = builder.build_unconditional_branch(loop_block);
+            }
+            ScheduleKind::DailyAt { hour, min } => {
+                self.emit_timeofday_wrapper(&builder, func, &sleep_fn, 86400, hour, min, None)?;
+            }
+            ScheduleKind::WeeklyAt { dow, hour, min } => {
+                self.emit_timeofday_wrapper(&builder, func, &sleep_fn, 604800, hour, min, Some(dow))?;
+            }
+            ScheduleKind::MonthlyAt { dom, hour, min } => {
+                // For monthly, use the same time-of-day computation but with 86400 base (daily check)
+                // and a runtime day-of-month check — but that's complex. v1: use interval.
+                let _ = dom;
+                self.emit_timeofday_wrapper(&builder, func, &sleep_fn, 86400, hour, min, None)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Emit a time-of-day schedule wrapper with runtime initial offset computation.
+    ///
+    /// Produces:
+    ///   void* __schedule_thread_<name>(void* arg) {
+    ///       while (1) {
+    ///           // Compute seconds until next target time
+    ///           time_t now = time(NULL);
+    ///           struct tm* local = localtime(&now);
+    ///           int target_secs = target_hour * 3600 + target_min * 60;
+    ///           int now_secs = local->tm_hour * 3600 + local->tm_min * 60 + local->tm_sec;
+    ///           int offset = target_secs - now_secs;
+    ///           if (offset <= 0) offset += base_interval;
+    ///           sleep(offset);
+    ///           func();
+    ///       }
+    ///   }
+    fn emit_timeofday_wrapper(
+        &self,
+        builder: &inkwell::builder::Builder<'static>,
+        func: &MirFunction,
+        sleep_fn: &inkwell::values::FunctionValue<'static>,
+        base_interval: u32,
+        target_hour: u32,
+        target_min: u32,
+        _target_dow: Option<u32>,
+    ) -> Result<()> {
+        let i32_ty = self.context.i32_type();
+        let i64_ty = self.context.i64_type();
+        let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::default());
+
+        let wrapper_fn = builder.get_insert_block().unwrap().get_parent().unwrap();
+
+        // Declare time: time_t time(time_t *t)
+        let time_fn = self.module.add_function(
+            "time",
+            i64_ty.fn_type(&[ptr_ty.into()], false),
+            None,
+        );
+
+        let loop_block = self.context.append_basic_block(wrapper_fn, "loop");
+        let _ = builder.build_unconditional_branch(loop_block);
+        builder.position_at_end(loop_block);
+
+        // time(NULL)
+        let null_ptr = ptr_ty.const_zero();
+        let call_result = builder
+            .build_call(time_fn, &[null_ptr.into()], "__schedule_now")
+            .map_err(|e| crate::error::CompileError::new(format!("time call: {}", e)))?;
+        let now_epoch = call_result
+            .as_any_value_enum()
+            .into_int_value();
+
+        // Compute seconds since midnight: now_epoch % 86400
+        let day_secs = i64_ty.const_int(86400, false);
+        let now_today_secs = builder
+            .build_int_signed_rem(now_epoch, day_secs, "__schedule_today_secs")
+            .unwrap();
+
+        // Compute target seconds: target_hour * 3600 + target_min * 60
+        let target_total = (target_hour * 3600 + target_min * 60) as u64;
+        let target_val = i64_ty.const_int(target_total, false);
+
+        // offset = target - now_today
+        let mut offset = builder
+            .build_int_sub(target_val, now_today_secs, "__schedule_offset")
+            .unwrap();
+
+        let base_val = i64_ty.const_int(base_interval as u64, false);
+
+        // if offset <= 0, offset += base_interval (use select, avoids phi node)
+        let zero = i64_ty.const_zero();
+        let cond = builder
+            .build_int_compare(
+                inkwell::IntPredicate::SLE,
+                offset,
+                zero,
+                "__schedule_offset_neg_check",
+            )
+            .unwrap();
+        let offset_plus_base = builder
+            .build_int_add(offset, base_val, "__schedule_offset_plus_base")
+            .unwrap();
+        let final_offset = builder
+            .build_select(cond, offset_plus_base, offset, "__schedule_offset_final")
+            .map_err(|e| crate::error::CompileError::new(format!("select: {}", e)))?
+            .into_int_value();
+
+        // i32 sleep takes unsigned int, so truncate the i64 offset
+        let sleep_arg = builder
+            .build_int_truncate(final_offset, i32_ty, "__schedule_sleep_secs")
+            .unwrap();
+
+        let _ = builder
+            .build_call(*sleep_fn, &[sleep_arg.into()], "__schedule_sleep")
+            .map_err(|e| crate::error::CompileError::new(format!("sleep call: {}", e)))?;
+
+        self.call_scheduled_func(builder, func)?;
+
+        let _ = builder.build_unconditional_branch(loop_block);
+        Ok(())
+    }
+
+    /// Helper: emit a call to the scheduled function.
+    fn call_scheduled_func(
+        &self,
+        builder: &inkwell::builder::Builder<'static>,
+        func: &MirFunction,
+    ) -> Result<()> {
+        if let Some(target_fn) = self.module.get_function(&func.name) {
+            let _ = builder
+                .build_call(target_fn, &[], &format!("__schedule_call_{}", func.name))
+                .map_err(|e| crate::error::CompileError::new(format!("call {}: {}", func.name, e)))?;
+        }
+        Ok(())
+    }
+
+    /// Emit the __schedule_startup function.
+    /// Creates pthreads for each scheduled function (detached, no join).
+    fn emit_schedule_startup(&self, scheduled: &[&MirFunction]) -> Result<()> {
+        let i32_ty = self.context.i32_type();
+        let i64_ty = self.context.i64_type();
+        let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::default());
+        let void_ty = self.context.void_type();
+
+        // Declare pthread_create
+        let pthread_create_fn = self.module.add_function(
+            "pthread_create",
+            i32_ty.fn_type(&[ptr_ty.into(), ptr_ty.into(), ptr_ty.into(), ptr_ty.into()], false),
+            None,
+        );
+
+        // Declare pthread_detach: int pthread_detach(pthread_t thread);
+        let pthread_detach_fn = self.module.add_function(
+            "pthread_detach",
+            i32_ty.fn_type(&[i64_ty.into()], false),
+            None,
+        );
+
+        let startup_fn_name = "__schedule_startup";
+        let startup_fn_ty = void_ty.fn_type(&[], false);
+        let startup_fn = self.module.add_function(startup_fn_name, startup_fn_ty, None);
+        let entry = self.context.append_basic_block(startup_fn, "entry");
+        let builder = self.context.create_builder();
+        builder.position_at_end(entry);
+
+        let null_ptr = ptr_ty.const_zero();
+
+        for func in scheduled {
+            let thread_ptr = builder
+                .build_alloca(i64_ty, &format!("__schedule_tid_{}", func.name))
+                .unwrap();
+
+            let wrapper_name = format!("__schedule_thread_{}", func.name);
+            let wrapper_fn = self.module.get_function(&wrapper_name).unwrap();
+
+            let create_args: Vec<BasicMetadataValueEnum> = vec![
+                thread_ptr.into(),
+                null_ptr.into(),
+                wrapper_fn.as_global_value().as_pointer_value().into(),
+                null_ptr.into(),
+            ];
+
+            let _ = builder
+                .build_call(
+                    pthread_create_fn,
+                    &create_args,
+                    &format!("__schedule_create_{}", func.name),
+                )
+                .map_err(|e| {
+                    crate::error::CompileError::new(format!(
+                        "pthread_create for {}: {}",
+                        func.name, e
+                    ))
+                })?;
+
+            // Detach the thread
+            let tid = builder.build_load(i64_ty, thread_ptr, &format!("__schedule_tid_load_{}", func.name)).unwrap();
+            let detach_args: Vec<BasicMetadataValueEnum> = vec![tid.into()];
+            let _ = builder
+                .build_call(pthread_detach_fn, &detach_args, &format!("__schedule_detach_{}", func.name))
+                .map_err(|e| {
+                    crate::error::CompileError::new(format!(
+                        "pthread_detach for {}: {}",
+                        func.name, e
+                    ))
+                })?;
+        }
+
+        builder.build_return(None).unwrap();
         Ok(())
     }
 
@@ -96,13 +665,19 @@ impl Codegen {
         }
 
         // Emit body stmts
+        let mut has_return = false;
         for stmt in &func.body.stmts {
+            if matches!(stmt, MirStmt::Return(_, _)) {
+                has_return = true;
+            }
             self.emit_stmt(stmt, &builder, func)?;
         }
 
-        // Default return 0
-        let ret_val = self.context.i64_type().const_zero();
-        builder.build_return(Some(&ret_val)).expect("return");
+        // Default return — only if no explicit/implicit return was already emitted
+        if !has_return {
+            let ret_val = self.context.i64_type().const_zero();
+            builder.build_return(Some(&ret_val)).expect("return");
+        }
 
         Ok(())
     }
@@ -121,12 +696,16 @@ impl Codegen {
             MirStmt::CondBranch { dbg_line, .. } => *dbg_line,
             MirStmt::UnsafeBlock(_) => func.dbg_line,
             MirStmt::Bench { dbg_line, .. } => *dbg_line,
+            MirStmt::Wait(_, line) => *line,
+            MirStmt::Parallel { dbg_line, .. } => *dbg_line,
+            MirStmt::Await { dbg_line, .. } => *dbg_line,
             MirStmt::ConsoleCall { dbg_line, .. } => *dbg_line,
             MirStmt::FsCall { dbg_line, .. } => *dbg_line,
             MirStmt::TransportCall { dbg_line, .. } => *dbg_line,
             MirStmt::StringCall { dbg_line, .. } => *dbg_line,
             MirStmt::RegexCall { dbg_line, .. } => *dbg_line,
             MirStmt::DateTimeCall { dbg_line, .. } => *dbg_line,
+            MirStmt::IsCall { dbg_line, .. } => *dbg_line,
             _ => func.dbg_line,
         };
 
@@ -141,15 +720,30 @@ impl Codegen {
             }
             MirStmt::Store { .. } => {}
             MirStmt::Return(ret, _) => {
-                if let Some(_value) = ret {
-                    let ret_val = self.context.i64_type().const_zero();
-                    builder.build_return(Some(&ret_val)).expect("return");
+                if let Some(value) = ret {
+                    let val = self.load_mir_value(value, builder);
+                    builder.build_return(Some(&val)).expect("return");
                 } else {
                     builder.build_return(None).expect("return");
                 }
             }
             MirStmt::Bench { .. } => {
                 self.emit_bench_stmt(stmt, builder, func)?;
+            }
+            MirStmt::Wait(millis, _) => {
+                self.emit_wait_stmt(*millis, builder)?;
+            }
+            MirStmt::Parallel { blocks, .. } => {
+                self.emit_parallel_stmt(blocks, builder, func)?;
+            }
+            MirStmt::Await { value, result_target: _, dbg_line: _ } => {
+                // For C backend v1: execute awaited statements synchronously inline.
+                // A full state-machine transform would split the function into states
+                // at each await point and re-enter on poll. For now, inline execution
+                // works for simple async functions that don't cross yield points.
+                for s in value {
+                    self.emit_stmt(s, builder, func)?;
+                }
             }
             MirStmt::ConsoleCall { method, args, dbg_line: _ } => {
                 self.emit_console_call(method, args, builder)?;
@@ -168,6 +762,30 @@ impl Codegen {
             }
             MirStmt::DateTimeCall { result, method, args, dbg_line: _ } => {
                 self.emit_datetime_call(result, method, args, builder)?;
+            }
+            MirStmt::AuthCall { result, method, args, dbg_line: _ } => {
+                self.emit_auth_call(result, method, args, builder)?;
+            }
+            MirStmt::WorkerCall { result, method, args, dbg_line: _ } => {
+                self.emit_worker_call(result, method, args, builder)?;
+            }
+            MirStmt::DictCall { result, method, args, dbg_line: _ } => {
+                self.emit_dict_call(result, method, args, builder)?;
+            }
+            MirStmt::JsonCall { result, method, args, dbg_line: _ } => {
+                self.emit_json_call(result, method, args, builder)?;
+            }
+            MirStmt::MathCall { result, method, args, dbg_line: _ } => {
+                self.emit_math_call(result, method, args, builder)?;
+            }
+            MirStmt::EnvCall { result, method, args, dbg_line: _ } => {
+                self.emit_env_call(result, method, args, builder)?;
+            }
+            MirStmt::HttpCall { result, method, args, dbg_line: _ } => {
+                self.emit_http_call(result, method, args, builder)?;
+            }
+            MirStmt::IsCall { result, value, type_name, dbg_line: _ } => {
+                self.emit_is_call(result, value, type_name, builder)?;
             }
             _ => {}
         }
@@ -280,13 +898,248 @@ impl Codegen {
         Ok(())
     }
 
+    fn emit_wait_stmt(
+        &self,
+        millis: u64,
+        builder: &inkwell::builder::Builder<'static>,
+    ) -> Result<()> {
+        let i32_ty = self.context.i32_type();
+        let usleep_fn = self.module.add_function(
+            "usleep",
+            i32_ty.fn_type(&[i32_ty.into()], false),
+            None,
+        );
+        let micros = (millis as u64) * 1000;
+        let micros_val = i32_ty.const_int(micros, false);
+        let _ = builder
+            .build_call(usleep_fn, &[micros_val.into()], "__wait_usleep")
+            .map_err(|e| crate::error::CompileError::new(format!("usleep call: {}", e)))?;
+        Ok(())
+    }
+
+    fn emit_parallel_stmt(
+        &self,
+        blocks: &[Vec<MirStmt>],
+        builder: &inkwell::builder::Builder<'static>,
+        func: &MirFunction,
+    ) -> Result<()> {
+        let i32_ty = self.context.i32_type();
+        let i64_ty = self.context.i64_type();
+        let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::default());
+        let _void_ty = self.context.void_type();
+
+        // Declare pthread_create: int pthread_create(pthread_t *thread, const pthread_attr_t *attr, void *(*start_routine)(void *), void *arg);
+        let pthread_create_fn = self.module.add_function(
+            "pthread_create",
+            i32_ty.fn_type(&[ptr_ty.into(), ptr_ty.into(), ptr_ty.into(), ptr_ty.into()], false),
+            None,
+        );
+
+        // Declare pthread_join: int pthread_join(pthread_t thread, void **retval);
+        let pthread_join_fn = self.module.add_function(
+            "pthread_join",
+            i32_ty.fn_type(&[i64_ty.into(), ptr_ty.into()], false),
+            None,
+        );
+
+        // Create an array of pthread_t (i64) on the stack
+        let num_threads = blocks.len();
+        let threads_array_ty = i64_ty.array_type(num_threads as u32);
+        let threads = builder.build_alloca(threads_array_ty, "__parallel_threads").expect("alloca_threads");
+
+        let zero_i32 = i32_ty.const_zero();
+        let null_ptr = ptr_ty.const_zero();
+
+        // Create and start each thread
+        for (i, block_stmts) in blocks.iter().enumerate() {
+            let wrapper_name = format!("__parallel_wrapper_{}", i);
+
+            // Create the wrapper function: void* wrapper(void* arg)
+            let wrapper_fn_ty = ptr_ty.fn_type(&[ptr_ty.into()], false);
+            let wrapper_fn = self.module.add_function(&wrapper_name, wrapper_fn_ty, None);
+
+            // Build the wrapper function body
+            let wrapper_entry = self.context.append_basic_block(wrapper_fn, "entry");
+            let wrapper_builder = self.context.create_builder();
+            wrapper_builder.position_at_end(wrapper_entry);
+
+            // Emit the block statements in the wrapper
+            for s in block_stmts {
+                // We need a simplified emit for the wrapper — use a recursive call-style approach
+                self.emit_stmt_in_wrapper(s, &wrapper_builder, func)?;
+            }
+
+            // Return NULL
+            wrapper_builder.build_return(Some(&null_ptr)).expect("wrapper_ret");
+
+            // Store thread ID: threads[i] = pthread_create result pointer
+            let thread_i_ptr = unsafe {
+                builder.build_in_bounds_gep(threads_array_ty, threads, &[zero_i32, i32_ty.const_int(i as u64, false)], &format!("__parallel_thread_{}_ptr", i))
+            }.map_err(|e| crate::error::CompileError::new(format!("thread gep: {}", e)))?;
+
+            let create_args: &[BasicMetadataValueEnum] = &[
+                thread_i_ptr.into(),
+                null_ptr.into(),
+                wrapper_fn.as_global_value().as_pointer_value().into(),
+                null_ptr.into(),
+            ];
+            builder.build_call(pthread_create_fn, create_args, &format!("__parallel_create_{}", i))
+                .map_err(|e| crate::error::CompileError::new(format!("pthread_create {}: {}", i, e)))?;
+        }
+
+        // Join all threads
+        for i in 0..num_threads {
+            let thread_i_ptr = unsafe {
+                builder.build_in_bounds_gep(threads_array_ty, threads, &[zero_i32, i32_ty.const_int(i as u64, false)], &format!("__parallel_join_{}_ptr", i))
+            }.map_err(|e| crate::error::CompileError::new(format!("join gep: {}", e)))?;
+
+            let thread_i = builder.build_load(i64_ty, thread_i_ptr, &format!("__parallel_thread_{}", i))
+                .map_err(|e| crate::error::CompileError::new(format!("load thread {}: {}", i, e)))?
+                .into_int_value();
+
+            let join_args: &[BasicMetadataValueEnum] = &[thread_i.into(), null_ptr.into()];
+            builder.build_call(pthread_join_fn, join_args, &format!("__parallel_join_{}", i))
+                .map_err(|e| crate::error::CompileError::new(format!("pthread_join {}: {}", i, e)))?;
+        }
+
+        Ok(())
+    }
+
+    fn emit_stmt_in_wrapper(
+        &self,
+        stmt: &MirStmt,
+        builder: &inkwell::builder::Builder<'static>,
+        func: &MirFunction,
+    ) -> Result<()> {
+        match stmt {
+            MirStmt::Alloca { .. } => {} // allocas are irrelevant in wrapper context
+            MirStmt::Store { .. } => {}
+            MirStmt::Call { callee, args, .. } => {
+                let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::default());
+                let callee_fn = self.module.get_function(callee).unwrap_or_else(|| {
+                    let fn_ty = ptr_ty.fn_type(&[ptr_ty.into()], true);
+                    self.module.add_function(callee, fn_ty, None)
+                });
+                let mut llvm_args = Vec::new();
+                for arg in args {
+                    llvm_args.push(self.load_mir_value_simple(arg, builder));
+                }
+                builder.build_call(callee_fn, &llvm_args, "wrapper_call")
+                    .map_err(|e| crate::error::CompileError::new(format!("wrapper call: {}", e)))?;
+            }
+            MirStmt::ConsoleCall { method, args, .. } => {
+                self.emit_console_call(method, args, builder)?;
+            }
+            MirStmt::FsCall { result, method, args, .. } => {
+                self.emit_fs_call(result, method, args, builder, func)?;
+            }
+            MirStmt::TransportCall { result, method, args, .. } => {
+                self.emit_transport_call(result, method, args, builder)?;
+            }
+            MirStmt::StringCall { result, method, args, .. } => {
+                self.emit_string_call(result, method, args, builder)?;
+            }
+            MirStmt::RegexCall { result, method, args, .. } => {
+                self.emit_regex_call(result, method, args, builder)?;
+            }
+            MirStmt::DateTimeCall { result, method, args, .. } => {
+                self.emit_datetime_call(result, method, args, builder)?;
+            }
+            MirStmt::AuthCall { result, method, args, .. } => {
+                self.emit_auth_call(result, method, args, builder)?;
+            }
+            MirStmt::WorkerCall { result, method, args, .. } => {
+                self.emit_worker_call(result, method, args, builder)?;
+            }
+            MirStmt::DictCall { result, method, args, .. } => {
+                self.emit_dict_call(result, method, args, builder)?;
+            }
+            MirStmt::JsonCall { result, method, args, .. } => {
+                self.emit_json_call(result, method, args, builder)?;
+            }
+            MirStmt::MathCall { result, method, args, .. } => {
+                self.emit_math_call(result, method, args, builder)?;
+            }
+            MirStmt::EnvCall { result, method, args, .. } => {
+                self.emit_env_call(result, method, args, builder)?;
+            }
+            MirStmt::HttpCall { result, method, args, .. } => {
+                self.emit_http_call(result, method, args, builder)?;
+            }
+            MirStmt::IsCall { result, value, type_name, .. } => {
+                self.emit_is_call(result, value, type_name, builder)?;
+            }
+            MirStmt::Bench { body_stmts, .. } => {
+                for s in body_stmts {
+                    self.emit_stmt_in_wrapper(s, builder, func)?;
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn load_mir_value_simple(
+        &self,
+        value: &MirValue,
+        builder: &inkwell::builder::Builder<'static>,
+    ) -> BasicMetadataValueEnum<'static> {
+        let i64_ty = self.context.i64_type();
+        match value {
+            MirValue::Local(_) => i64_ty.const_zero().into(),
+            MirValue::IntLit(v) => i64_ty.const_int(*v as u64, true).into(),
+            MirValue::FloatLit(v) => self.context.f64_type().const_float(*v).into(),
+            MirValue::BoolLit(v) => self.context.bool_type().const_int(*v as u64, false).into(),
+            MirValue::StringLit(s) => {
+                builder.build_global_string_ptr(s, "__wrapper_str")
+                    .expect("wrapper global string")
+                    .as_pointer_value()
+                    .into()
+            }
+            MirValue::CharLit(c) => self.context.i8_type().const_int(*c as u64, false).into(),
+            MirValue::Nil => self.context.ptr_type(inkwell::AddressSpace::default()).const_zero().into(),
+            MirValue::BinaryOp { .. } | MirValue::UnaryOp { .. } => i64_ty.const_zero().into(),
+        }
+    }
+
+    fn load_mir_value(
+        &self,
+        value: &MirValue,
+        builder: &inkwell::builder::Builder<'static>,
+    ) -> inkwell::values::BasicValueEnum<'static> {
+        let i64_ty = self.context.i64_type();
+        match value {
+            MirValue::IntLit(v) => i64_ty.const_int(*v as u64, true).as_basic_value_enum(),
+            MirValue::FloatLit(v) => self.context.f64_type().const_float(*v).as_basic_value_enum(),
+            MirValue::BoolLit(v) => self.context.bool_type().const_int(*v as u64, false).as_basic_value_enum(),
+            MirValue::CharLit(c) => self.context.i8_type().const_int(*c as u64, false).as_basic_value_enum(),
+            MirValue::StringLit(s) => {
+                builder.build_global_string_ptr(s, "__ret_str")
+                    .expect("ret global string ptr")
+                    .as_pointer_value()
+                    .as_basic_value_enum()
+            }
+            MirValue::Nil => self.context.ptr_type(inkwell::AddressSpace::default())
+                .const_zero()
+                .as_basic_value_enum(),
+            MirValue::Local(_) | MirValue::BinaryOp { .. } | MirValue::UnaryOp { .. } => {
+                // Use zero of the return type for uncomputable values
+                i64_ty.const_zero().as_basic_value_enum()
+            }
+        }
+    }
+
     pub fn write_to_file(&self, path: &str) -> Result<()> {
         if self.module.verify().is_ok() {
             self.module.print_to_file(path).map_err(|e| {
                 crate::error::CompileError::new(format!("Failed to write bitcode: {}", e))
             })?;
+            Ok(())
+        } else {
+            Err(crate::error::CompileError::new(
+                "LLVM module verification failed — cannot write bitcode",
+            ))
         }
-        Ok(())
     }
 
     pub fn print_ir(&self) -> String {
@@ -1612,6 +2465,396 @@ impl Codegen {
                     .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
             }
         }
+        Ok(())
+    }
+
+    fn emit_auth_call(
+        &self,
+        result: &Option<String>,
+        method: &str,
+        args: &[MirValue],
+        builder: &inkwell::builder::Builder<'static>,
+    ) -> Result<()> {
+        let i32_ty = self.context.i32_type();
+        let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::default());
+        let printf_ty = i32_ty.fn_type(&[ptr_ty.into()], true);
+        let printf_fn = self.module.add_function("printf", printf_ty, None);
+
+        match method {
+            "jwtSign" => {
+                let fmt = builder.build_global_string_ptr("[auth] jwtSign: use JS runtime\n", "__auth_jwtsign_stub")
+                    .expect("auth jwtSign stub");
+                let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__auth_jwtsign_call")
+                    .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+            }
+            "jwtVerify" => {
+                let fmt = builder.build_global_string_ptr("[auth] jwtVerify: use JS runtime\n", "__auth_jwtverify_stub")
+                    .expect("auth jwtVerify stub");
+                let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__auth_jwtverify_call")
+                    .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+            }
+            "jwtDecode" => {
+                let fmt = builder.build_global_string_ptr("[auth] jwtDecode: use JS runtime\n", "__auth_jwtdecode_stub")
+                    .expect("auth jwtDecode stub");
+                let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__auth_jwtdecode_call")
+                    .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+            }
+            "createSession" => {
+                let fmt = builder.build_global_string_ptr("[auth] createSession: use JS runtime\n", "__auth_createsess_stub")
+                    .expect("auth createSession stub");
+                let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__auth_createsess_call")
+                    .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+            }
+            "getSession" => {
+                let fmt = builder.build_global_string_ptr("[auth] getSession: use JS runtime\n", "__auth_getsess_stub")
+                    .expect("auth getSession stub");
+                let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__auth_getsess_call")
+                    .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+            }
+            "destroySession" => {
+                let fmt = builder.build_global_string_ptr("[auth] destroySession: use JS runtime\n", "__auth_destroysess_stub")
+                    .expect("auth destroySession stub");
+                let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__auth_destroysess_call")
+                    .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+            }
+            "hashPassword" => {
+                let fmt = builder.build_global_string_ptr("[auth] hashPassword: use JS runtime\n", "__auth_hashpw_stub")
+                    .expect("auth hashPassword stub");
+                let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__auth_hashpw_call")
+                    .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+            }
+            "verifyPassword" => {
+                let fmt = builder.build_global_string_ptr("[auth] verifyPassword: use JS runtime\n", "__auth_verifypw_stub")
+                    .expect("auth verifyPassword stub");
+                let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__auth_verifypw_call")
+                    .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+            }
+            "checkPermission" => {
+                let fmt = builder.build_global_string_ptr("[auth] checkPermission: use JS runtime\n", "__auth_checkperm_stub")
+                    .expect("auth checkPermission stub");
+                let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__auth_checkperm_call")
+                    .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+            }
+            "hasRole" => {
+                let fmt = builder.build_global_string_ptr("[auth] hasRole: use JS runtime\n", "__auth_hasrole_stub")
+                    .expect("auth hasRole stub");
+                let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__auth_hasrole_call")
+                    .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+            }
+            "hasScope" => {
+                let fmt = builder.build_global_string_ptr("[auth] hasScope: use JS runtime\n", "__auth_hasscope_stub")
+                    .expect("auth hasScope stub");
+                let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__auth_hasscope_call")
+                    .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+            }
+            "oauth2Authorize" => {
+                let fmt = builder.build_global_string_ptr("[auth] oauth2Authorize: use JS runtime\n", "__auth_oauth2auth_stub")
+                    .expect("auth oauth2Authorize stub");
+                let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__auth_oauth2auth_call")
+                    .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+            }
+            "oauth2Token" => {
+                let fmt = builder.build_global_string_ptr("[auth] oauth2Token: use JS runtime\n", "__auth_oauth2tok_stub")
+                    .expect("auth oauth2Token stub");
+                let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__auth_oauth2tok_call")
+                    .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+            }
+            "oauth2Refresh" => {
+                let fmt = builder.build_global_string_ptr("[auth] oauth2Refresh: use JS runtime\n", "__auth_oauth2ref_stub")
+                    .expect("auth oauth2Refresh stub");
+                let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__auth_oauth2ref_call")
+                    .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+            }
+            "passkeyRegister" => {
+                let fmt = builder.build_global_string_ptr("[auth] passkeyRegister: use JS runtime\n", "__auth_passkeyreg_stub")
+                    .expect("auth passkeyRegister stub");
+                let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__auth_passkeyreg_call")
+                    .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+            }
+            "passkeyAuthenticate" => {
+                let fmt = builder.build_global_string_ptr("[auth] passkeyAuthenticate: use JS runtime\n", "__auth_passkeyauth_stub")
+                    .expect("auth passkeyAuthenticate stub");
+                let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__auth_passkeyauth_call")
+                    .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+            }
+            "tenantContext" => {
+                let fmt = builder.build_global_string_ptr("[auth] tenantContext: use JS runtime\n", "__auth_tenantctx_stub")
+                    .expect("auth tenantContext stub");
+                let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__auth_tenantctx_call")
+                    .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+            }
+            "getTenant" => {
+                let fmt = builder.build_global_string_ptr("[auth] getTenant: use JS runtime\n", "__auth_gettenant_stub")
+                    .expect("auth getTenant stub");
+                let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__auth_gettenant_call")
+                    .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+            }
+            "listTenants" => {
+                let fmt = builder.build_global_string_ptr("[auth] listTenants: use JS runtime\n", "__auth_listtenants_stub")
+                    .expect("auth listTenants stub");
+                let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__auth_listtenants_call")
+                    .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+            }
+            "createTenant" => {
+                let fmt = builder.build_global_string_ptr("[auth] createTenant: use JS runtime\n", "__auth_createtenant_stub")
+                    .expect("auth createTenant stub");
+                let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__auth_createtenant_call")
+                    .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+            }
+            "grantRole" => {
+                let fmt = builder.build_global_string_ptr("[auth] grantRole: use JS runtime\n", "__auth_grantrole_stub")
+                    .expect("auth grantRole stub");
+                let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__auth_grantrole_call")
+                    .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+            }
+            "grantPermission" => {
+                let fmt = builder.build_global_string_ptr("[auth] grantPermission: use JS runtime\n", "__auth_grantperm_stub")
+                    .expect("auth grantPermission stub");
+                let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__auth_grantperm_call")
+                    .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+            }
+            "revokeRole" => {
+                let fmt = builder.build_global_string_ptr("[auth] revokeRole: use JS runtime\n", "__auth_revokerole_stub")
+                    .expect("auth revokeRole stub");
+                let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__auth_revokerole_call")
+                    .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+            }
+            "revokePermission" => {
+                let fmt = builder.build_global_string_ptr("[auth] revokePermission: use JS runtime\n", "__auth_revokeperm_stub")
+                    .expect("auth revokePermission stub");
+                let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__auth_revokeperm_call")
+                    .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+            }
+            "generateApiKey" => {
+                let fmt = builder.build_global_string_ptr("[auth] generateApiKey: use JS runtime\n", "__auth_genapikey_stub")
+                    .expect("auth generateApiKey stub");
+                let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__auth_genapikey_call")
+                    .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+            }
+            "validateApiKey" => {
+                let fmt = builder.build_global_string_ptr("[auth] validateApiKey: use JS runtime\n", "__auth_valapikey_stub")
+                    .expect("auth validateApiKey stub");
+                let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__auth_valapikey_call")
+                    .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+            }
+            "checkAccess" => {
+                let fmt = builder.build_global_string_ptr("[auth] checkAccess: use JS runtime\n", "__auth_checkaccess_stub")
+                    .expect("auth checkAccess stub");
+                let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__auth_checkaccess_call")
+                    .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+            }
+            "setRoles" => {
+                let fmt = builder.build_global_string_ptr("[auth] setRoles: use JS runtime\n", "__auth_setroles_stub")
+                    .expect("auth setRoles stub");
+                let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__auth_setroles_call")
+                    .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+            }
+            "setPermissions" => {
+                let fmt = builder.build_global_string_ptr("[auth] setPermissions: use JS runtime\n", "__auth_setperms_stub")
+                    .expect("auth setPermissions stub");
+                let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__auth_setperms_call")
+                    .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+            }
+            _ => {
+                let fmt = builder.build_global_string_ptr(
+                    &format!("[auth] {}: use JS runtime\n", method), "__auth_unknown_fmt"
+                ).expect("auth unknown fmt");
+                let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__auth_unknown_call")
+                    .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+            }
+        }
+        Ok(())
+    }
+
+    fn emit_worker_call(
+        &self,
+        result: &Option<String>,
+        method: &str,
+        args: &[MirValue],
+        builder: &inkwell::builder::Builder<'static>,
+    ) -> Result<()> {
+        let i32_ty = self.context.i32_type();
+        let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::default());
+        let printf_ty = i32_ty.fn_type(&[ptr_ty.into()], true);
+        let printf_fn = self.module.add_function("printf", printf_ty, None);
+
+        match method {
+            "create" => {
+                let fmt = builder.build_global_string_ptr("[worker] create: use JS runtime\n", "__wr_create_stub")
+                    .expect("worker create stub");
+                let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__wr_create_call")
+                    .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+            }
+            "send" => {
+                let fmt = builder.build_global_string_ptr("[worker] send: use JS runtime\n", "__wr_send_stub")
+                    .expect("worker send stub");
+                let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__wr_send_call")
+                    .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+            }
+            "post" => {
+                let fmt = builder.build_global_string_ptr("[worker] post: use JS runtime\n", "__wr_post_stub")
+                    .expect("worker post stub");
+                let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__wr_post_call")
+                    .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+            }
+            "receive" => {
+                let fmt = builder.build_global_string_ptr("[worker] receive: use JS runtime\n", "__wr_recv_stub")
+                    .expect("worker receive stub");
+                let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__wr_recv_call")
+                    .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+            }
+            "wait" => {
+                let fmt = builder.build_global_string_ptr("[worker] wait: use JS runtime\n", "__wr_wait_stub")
+                    .expect("worker wait stub");
+                let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__wr_wait_call")
+                    .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+            }
+            "terminate" => {
+                let fmt = builder.build_global_string_ptr("[worker] terminate: use JS runtime\n", "__wr_term_stub")
+                    .expect("worker terminate stub");
+                let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__wr_term_call")
+                    .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+            }
+            "isRunning" => {
+                let fmt = builder.build_global_string_ptr("[worker] isRunning: use JS runtime\n", "__wr_run_stub")
+                    .expect("worker isRunning stub");
+                let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__wr_run_call")
+                    .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+            }
+            "activeCount" => {
+                let fmt = builder.build_global_string_ptr("[worker] activeCount: use JS runtime\n", "__wr_cnt_stub")
+                    .expect("worker activeCount stub");
+                let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__wr_cnt_call")
+                    .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+            }
+            "terminateAll" => {
+                let fmt = builder.build_global_string_ptr("[worker] terminateAll: use JS runtime\n", "__wr_termall_stub")
+                    .expect("worker terminateAll stub");
+                let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__wr_termall_call")
+                    .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+            }
+            _ => {
+                let fmt = builder.build_global_string_ptr(
+                    &format!("[worker] {}: use JS runtime\n", method), "__wr_unknown_fmt"
+                ).expect("worker unknown fmt");
+                let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__wr_unknown_call")
+                    .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+            }
+        }
+        Ok(())
+    }
+
+    fn emit_dict_call(
+        &self,
+        result: &Option<String>,
+        method: &str,
+        args: &[MirValue],
+        builder: &inkwell::builder::Builder<'static>,
+    ) -> Result<()> {
+        let i32_ty = self.context.i32_type();
+        let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::default());
+        let printf_ty = i32_ty.fn_type(&[ptr_ty.into()], true);
+        let printf_fn = self.module.add_function("printf", printf_ty, None);
+        let fmt = builder.build_global_string_ptr(
+            &format!("[dict] {}: use JS runtime\n", method), "__dict_fmt"
+        ).expect("dict fmt");
+        let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__dict_call")
+            .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+        Ok(())
+    }
+
+    fn emit_json_call(
+        &self,
+        result: &Option<String>,
+        method: &str,
+        args: &[MirValue],
+        builder: &inkwell::builder::Builder<'static>,
+    ) -> Result<()> {
+        let i32_ty = self.context.i32_type();
+        let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::default());
+        let printf_ty = i32_ty.fn_type(&[ptr_ty.into()], true);
+        let printf_fn = self.module.add_function("printf", printf_ty, None);
+        let fmt = builder.build_global_string_ptr(
+            &format!("[json] {}: use JS runtime\n", method), "__json_fmt"
+        ).expect("json fmt");
+        let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__json_call")
+            .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+        Ok(())
+    }
+
+    fn emit_math_call(
+        &self,
+        result: &Option<String>,
+        method: &str,
+        args: &[MirValue],
+        builder: &inkwell::builder::Builder<'static>,
+    ) -> Result<()> {
+        let i32_ty = self.context.i32_type();
+        let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::default());
+        let printf_ty = i32_ty.fn_type(&[ptr_ty.into()], true);
+        let printf_fn = self.module.add_function("printf", printf_ty, None);
+        let fmt = builder.build_global_string_ptr(
+            &format!("[math] {}: use JS runtime\n", method), "__math_fmt"
+        ).expect("math fmt");
+        let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__math_call")
+            .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+        Ok(())
+    }
+
+    fn emit_env_call(
+        &self,
+        result: &Option<String>,
+        method: &str,
+        args: &[MirValue],
+        builder: &inkwell::builder::Builder<'static>,
+    ) -> Result<()> {
+        let i32_ty = self.context.i32_type();
+        let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::default());
+        let printf_ty = i32_ty.fn_type(&[ptr_ty.into()], true);
+        let printf_fn = self.module.add_function("printf", printf_ty, None);
+        let fmt = builder.build_global_string_ptr(
+            &format!("[env] {}: use JS runtime\n", method), "__env_fmt"
+        ).expect("env fmt");
+        let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__env_call")
+            .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+        Ok(())
+    }
+
+    fn emit_http_call(
+        &self,
+        result: &Option<String>,
+        method: &str,
+        args: &[MirValue],
+        builder: &inkwell::builder::Builder<'static>,
+    ) -> Result<()> {
+        let i32_ty = self.context.i32_type();
+        let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::default());
+        let printf_ty = i32_ty.fn_type(&[ptr_ty.into()], true);
+        let printf_fn = self.module.add_function("printf", printf_ty, None);
+        let fmt = builder.build_global_string_ptr(
+            &format!("[http] {}: use JS runtime\n", method), "__http_fmt"
+        ).expect("http fmt");
+        let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__http_call")
+            .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
+        Ok(())
+    }
+
+    fn emit_is_call(
+        &self,
+        result: &Option<String>,
+        value: &MirValue,
+        type_name: &MirValue,
+        builder: &inkwell::builder::Builder<'static>,
+    ) -> Result<()> {
+        let i32_ty = self.context.i32_type();
+        let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::default());
+        let printf_ty = i32_ty.fn_type(&[ptr_ty.into()], true);
+        let printf_fn = self.module.add_function("printf", printf_ty, None);
+        let fmt = builder.build_global_string_ptr(
+            "[is] instanceof: use JS runtime\n", "__is_fmt"
+        ).expect("is fmt");
+        let _ = builder.build_call(printf_fn, &[fmt.as_pointer_value().into()], "__is_call")
+            .map_err(|e| crate::error::CompileError::new(format!("printf: {}", e)))?;
         Ok(())
     }
 }

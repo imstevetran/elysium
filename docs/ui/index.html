@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>UI Guide — Elysium 2.0</title>
+  <meta name="description" content="Elysium 2.0 declarative UI layer — components, state, reactive rendering, two-way binding, and built-in views." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../assets/css/style.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>⚡</text></svg>" />
+</head>
+<body>
+  <header class="navbar">
+    <a href="../" class="logo">
+      <svg viewBox="0 0 28 28" fill="none"><rect x="2" y="2" width="24" height="24" rx="6" stroke="%236c63ff" stroke-width="2" /><text x="14" y="20" text-anchor="middle" font-size="16" font-weight="bold" fill="%236c63ff">E</text></svg>
+      <span>Elysium</span>
+    </a>
+    <button class="menu-toggle" aria-label="Toggle menu">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+    </button>
+    <nav>
+      <a href="../guide/">Guide</a>
+      <a href="../ui/" class="active">UI</a>
+      <a href="../std/">Std Lib</a>
+      <a href="../spec/">Spec</a>
+      <a href="../tooling/">Tooling</a>
+      <a href="../recipes/">Recipes</a>
+    </nav>
+  </header>
+
+  <main class="main">
+    <div class="breadcrumbs">
+      <a href="../">Home</a> / <span>UI Guide</span>
+    </div>
+
+    <div class="page-header">
+      <h1>Declarative UI Layer</h1>
+      <p>Build reactive, component-based user interfaces with Elysium's built-in UI framework. No external libraries needed.</p>
+    </div>
+
+    <div class="toc">
+      <div class="toc-title">Table of Contents</div>
+      <ol class="toc-list">
+        <li><a href="#core">Core Concepts</a></li>
+        <li><a href="#component-syntax">Component Syntax</a></li>
+        <li><a href="#state">State</a></li>
+        <li><a href="#conditional">Conditional Rendering</a></li>
+        <li><a href="#guards">Guards with <code>only</code></a></li>
+        <li><a href="#lists">Lists &amp; Spread</a></li>
+        <li><a href="#binding">Two-Way Binding</a></li>
+        <li><a href="#events">Event Handlers</a></li>
+        <li><a href="#styling">Styling</a></li>
+        <li><a href="#views">Built-in Views</a></li>
+        <li><a href="#todo">Full Example: Todo App</a></li>
+      </ol>
+    </div>
+
+    <section id="core" class="content-section animate-on-scroll">
+      <h2>Core Concepts</h2>
+      <ol>
+        <li><strong>Component = Function that returns a View</strong> — Components describe a tree of views. They are automatically reactive.</li>
+        <li><strong>State</strong> — Declare mutable, observable variables with <code>state</code>. Any view reading a state variable re-renders when it changes.</li>
+        <li><strong>Views are immutable descriptions</strong> — No direct DOM manipulation. The runtime diffs and updates the actual UI.</li>
+        <li><strong>Event handlers</strong> — Attached as closures to views.</li>
+      </ol>
+
+      <div class="info-box info-tip">
+        <strong>Philosophy:</strong> The UI layer is part of the language's standard library — not a framework bolted on. First-class syntax for views, state, and events with zero boilerplate.
+      </div>
+    </section>
+
+    <section id="component-syntax" class="content-section animate-on-scroll">
+      <h2>Component Syntax</h2>
+<pre><code><span class="hl-kw">component</span> <span class="hl-type">Name</span> {
+    <span class="hl-kw">state</span> varName = initialValue
+
+    <span class="hl-comment">// View tree</span>
+    <span class="hl-type">ViewType</span> { ... }
+}</code></pre>
+    </section>
+
+    <section id="state" class="content-section animate-on-scroll">
+      <h2>State</h2>
+      <p>Use <code>state</code> to declare mutable, observable variables. Views that read a state variable automatically re-render when it changes.</p>
+
+<pre><code><span class="hl-comment">/// Summary: Counter with increment button.</span>
+<span class="hl-kw">component</span> <span class="hl-type">Counter</span> {
+    <span class="hl-kw">state</span> count = <span class="hl-num">0</span> <span class="hl-kw">bc</span> <span class="hl-str">"current counter value"</span>
+
+    <span class="hl-type">Column</span> {
+        <span class="hl-type">Text</span>(<span class="hl-str">"Count: "</span>, count)
+        <span class="hl-type">Button</span>(label: <span class="hl-str">"Increment"</span>) onClick {
+            count = count + <span class="hl-num">1</span>
+        }
+    }
+}</code></pre>
+    </section>
+
+    <section id="conditional" class="content-section animate-on-scroll">
+      <h2>Conditional Rendering</h2>
+      <p>Use <code>if … then</code> directly inside the view tree.</p>
+<pre><code><span class="hl-kw">component</span> <span class="hl-type">Greeting</span> {
+    <span class="hl-kw">state</span> isLoggedIn = <span class="hl-num">true</span>
+
+    <span class="hl-type">Column</span> {
+        <span class="hl-kw">if</span> isLoggedIn <span class="hl-kw">then</span>
+            <span class="hl-type">Text</span>(<span class="hl-str">"Welcome back!"</span>)
+        <span class="hl-kw">else</span>
+            <span class="hl-type">Button</span>(label: <span class="hl-str">"Login"</span>) {
+                isLoggedIn = <span class="hl-num">true</span>
+            }
+    }
+}</code></pre>
+    </section>
+
+    <section id="guards" class="content-section animate-on-scroll">
+      <h2>Guards with <code>only</code></h2>
+<pre><code><span class="hl-kw">component</span> <span class="hl-type">SecureContent</span> {
+    <span class="hl-kw">state</span> userRole = <span class="hl-str">"admin"</span>
+
+    <span class="hl-kw">only</span> userRole == <span class="hl-str">"admin"</span> <span class="hl-kw">do</span> {
+        <span class="hl-type">Text</span>(<span class="hl-str">"Top secret data"</span>)
+    }
+}</code></pre>
+    </section>
+
+    <section id="lists" class="content-section animate-on-scroll">
+      <h2>Lists &amp; Spread</h2>
+      <p>Use the <code>…</code> ellipsis operator to spread lists of views.</p>
+<pre><code><span class="hl-comment">/// Summary: Display a list of items.</span>
+<span class="hl-kw">component</span> <span class="hl-type">ItemList</span>(items: [<span class="hl-type">String</span>]) {
+    <span class="hl-type">Column</span> {
+        <span class="hl-op">…</span>items.map(item =&gt;
+            <span class="hl-type">Row</span> {
+                <span class="hl-type">Checkbox</span>(checked: <span class="hl-num">false</span>)
+                <span class="hl-type">Text</span>(item)
+            }
+        )
+    }
+}</code></pre>
+    </section>
+
+    <section id="binding" class="content-section animate-on-scroll">
+      <h2>Two-Way Binding</h2>
+      <p>Use <code>=</code> for binding between a UI input and state variable. Changes to the input automatically update the state.</p>
+<pre><code><span class="hl-kw">component</span> <span class="hl-type">NameEditor</span> {
+    <span class="hl-kw">state</span> name = <span class="hl-str">"Alice"</span>
+
+    <span class="hl-type">Column</span> {
+        <span class="hl-type">Text</span>(<span class="hl-str">"Your name:"</span>)
+        <span class="hl-type">TextField</span>(value = name)
+        <span class="hl-type">Text</span>(<span class="hl-str">"Hello, "</span>, name)
+    }
+}</code></pre>
+    </section>
+
+    <section id="events" class="content-section animate-on-scroll">
+      <h2>Event Handlers with <code>bc</code></h2>
+      <p>Use <code>bc</code> assertions inside event handlers for validation.</p>
+<pre><code><span class="hl-kw">component</span> <span class="hl-type">SubmitButton</span> {
+    <span class="hl-type">Button</span>(label: <span class="hl-str">"Submit"</span>) onClick {
+        <span class="hl-kw">bc</span> isValidForm(), <span class="hl-str">"Form must be valid before submitting"</span>
+        submitData()
+    }
+}</code></pre>
+    </section>
+
+    <section id="styling" class="content-section animate-on-scroll">
+      <h2>Styling</h2>
+      <p>Views accept an optional <code>style</code> attribute — a plain dictionary of style properties.</p>
+<pre><code><span class="hl-type">Text</span>(<span class="hl-str">"Important"</span>) <span class="hl-kw">style</span> {
+    color: <span class="hl-str">"red"</span>,
+    fontSize: <span class="hl-num">24</span>,
+    bold: <span class="hl-num">true</span>
+}</code></pre>
+    </section>
+
+    <section id="views" class="content-section animate-on-scroll">
+      <h2>Built-in Views</h2>
+      <table>
+        <tr><th>View</th><th>Description</th><th>Common Attributes</th></tr>
+        <tr><td><code>Text</code></td><td>Simple text label</td><td><code>content</code>, <code>style</code></td></tr>
+        <tr><td><code>Button</code></td><td>Clickable button</td><td><code>label</code>, <code>onClick</code></td></tr>
+        <tr><td><code>TextField</code></td><td>Text input</td><td><code>value</code> (two-way), <code>onChange</code></td></tr>
+        <tr><td><code>Image</code></td><td>Image display</td><td><code>src</code>, <code>width</code>, <code>height</code></td></tr>
+        <tr><td><code>Column</code></td><td>Vertical stack layout</td><td>children views</td></tr>
+        <tr><td><code>Row</code></td><td>Horizontal stack layout</td><td>children views</td></tr>
+        <tr><td><code>ScrollView</code></td><td>Scrollable container</td><td><code>axis</code> (vertical/horizontal)</td></tr>
+        <tr><td><code>ListView</code></td><td>Virtualised scrollable list</td><td><code>items</code>, <code>renderItem</code></td></tr>
+      </table>
+    </section>
+
+    <section id="todo" class="content-section animate-on-scroll">
+      <h2>Full Example: Todo App</h2>
+      <p>A complete, production-style todo application combining all UI features.</p>
+<div class="code-header"><span>TodoApp.elyx</span></div>
+<pre><code><span class="hl-comment">/// Summary: A simple todo list application.</span>
+<span class="hl-kw">component</span> <span class="hl-type">TodoApp</span> {
+    <span class="hl-kw">state</span> tasks = [<span class="hl-type">String</span>]()
+    <span class="hl-kw">state</span> newTask = <span class="hl-str">""</span>
+
+    <span class="hl-type">Column</span> padding: <span class="hl-num">20</span> {
+        <span class="hl-type">Text</span>(<span class="hl-str">"My Todos"</span>) <span class="hl-kw">style</span> { fontSize: <span class="hl-num">24</span>, bold: <span class="hl-num">true</span> }
+
+        <span class="hl-type">Row</span> {
+            <span class="hl-type">TextField</span>(value = newTask) placeholder <span class="hl-str">"Add a task"</span>
+            <span class="hl-type">Button</span>(label: <span class="hl-str">"Add"</span>) onClick {
+                <span class="hl-kw">only</span> newTask.trim() != <span class="hl-str">""</span>, <span class="hl-str">"Task cannot be empty"</span>
+                tasks = tasks + [newTask]
+                newTask = <span class="hl-str">""</span>
+            }
+        }
+
+        <span class="hl-kw">if</span> tasks.isEmpty <span class="hl-kw">then</span>
+            <span class="hl-type">Text</span>(<span class="hl-str">"No tasks yet!"</span>) <span class="hl-kw">style</span> { color: <span class="hl-str">"gray"</span> }
+        <span class="hl-kw">else</span>
+            <span class="hl-type">Column</span> {
+                <span class="hl-op">…</span>tasks.map((task, index) =&gt;
+                    <span class="hl-type">Row</span> {
+                        <span class="hl-type">Text</span>(task)
+                        <span class="hl-type">Button</span>(label: <span class="hl-str">"Delete"</span>) onClick {
+                            tasks = tasks.filter((_, i) =&gt; i != index)
+                        }
+                    }
+                )
+            }
+    }
+}</code></pre>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>Elysium 2.0 &middot; <a href="https://github.com/imstevetran/elysium">GitHub</a></p>
+  </footer>
+  <script src="../assets/js/main.js"></script>
+</body>
+</html>

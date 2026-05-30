@@ -124,8 +124,15 @@ impl OwnershipChecker {
                 Ok(())
             }
             Stmt::Todo(_) | Stmt::Question(_) => Ok(()),
+            Stmt::Wait(_) => Ok(()),
             Stmt::Bench(boxed) => {
                 self.check_block(&boxed.value.body)?;
+                Ok(())
+            }
+            Stmt::Parallel(boxed) => {
+                for item in &boxed.value.items {
+                    self.check_stmt(&item.value)?;
+                }
                 Ok(())
             }
         }
@@ -185,11 +192,13 @@ impl OwnershipChecker {
             Expr::Spread(inner) => self.check_expr(&inner.value),
             Expr::BcAnnotation { expr, .. } => self.check_expr(&expr.value),
             Expr::ErrorPropagate(inner) => self.check_expr(&inner.value),
+            Expr::Await(inner) => self.check_expr(&inner.value),
             Expr::MatchExpression { value, arms } => {
                 self.check_expr(&value.value)?;
                 for arm in arms { self.check_block(&arm.body)?; }
                 Ok(())
             }
+            Expr::Is { value, .. } => self.check_expr(&value.value),
         }
     }
 }

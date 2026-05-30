@@ -203,7 +203,40 @@ pub fn shake_packages(
             continue;
         }
 
-        // Read manifest to find entry point
+        let name = entry.file_name().to_string_lossy().to_string();
+
+        // Scoped directory (@org/) — recurse into it
+        if name.starts_with('@') {
+            let scope_entries = match std::fs::read_dir(&pkg_dir) {
+                Ok(e) => e,
+                Err(_) => continue,
+            };
+            for scope_entry in scope_entries {
+                let scope_entry = match scope_entry {
+                    Ok(e) => e,
+                    Err(_) => continue,
+                };
+                let sub_pkg_dir = scope_entry.path();
+                if !sub_pkg_dir.is_dir() {
+                    continue;
+                }
+                // Process the scoped package
+                let manifest_path = sub_pkg_dir.join("elysium.json");
+                let entry_file = if manifest_path.exists() {
+                    match crate::manifest::Manifest::load_from_dir(&sub_pkg_dir) {
+                        Ok(m) => m.entry.unwrap_or_else(|| "main.ely".to_string()),
+                        Err(_) => continue,
+                    }
+                } else {
+                    continue;
+                };
+
+                shake_single_package(&sub_pkg_dir, &entry_file, dry_run, &mut report)?;
+            }
+            continue;
+        }
+
+        // Regular (unscoped) package
         let manifest_path = pkg_dir.join("elysium.json");
         let entry_file = if manifest_path.exists() {
             match crate::manifest::Manifest::load_from_dir(&pkg_dir) {
@@ -214,43 +247,55 @@ pub fn shake_packages(
             continue;
         };
 
-        // Collect all .ely files in this package
-        let mut all_files = Vec::new();
-        collect_ely_files(&pkg_dir, &pkg_dir, &mut all_files)?;
-
-        // Make the entry file absolute
-        let entry_path = pkg_dir.join(&entry_file);
-        if !entry_path.exists() {
-            // Entry not found, keep everything to be safe
-            report.scanned_files += all_files.len();
-            report.kept_files += all_files.len();
-            continue;
-        }
-
-        // Build a temporary file list that only includes files from THIS package dir
-        let pkg_files: HashSet<PathBuf> = all_files.iter().cloned().collect();
-
-        // Find reachable files starting from the entry
-        let reachable = compute_reachable_from_entry(&entry_path, &pkg_files, &pkg_dir)?;
-
-        // Remove unreachable files
-        for file_path in &all_files {
-            report.scanned_files += 1;
-            if reachable.contains(file_path) {
-                report.kept_files += 1;
-            } else if !dry_run {
-                std::fs::remove_file(file_path)
-                    .map_err(|e| format!("Cannot remove {}: {}", file_path.display(), e))?;
-                report.removed_files += 1;
-                report.files_removed.push(file_path.clone());
-            } else {
-                report.removed_files += 1;
-                report.files_removed.push(file_path.clone());
-            }
-        }
+        shake_single_package(&pkg_dir, &entry_file, dry_run, &mut report)?;
     }
 
     Ok(report)
+}
+
+/// Perform tree-shaking on a single package directory.
+fn shake_single_package(
+    pkg_dir: &Path,
+    entry_file: &str,
+    dry_run: bool,
+    report: &mut ShakeReport,
+) -> Result<(), String> {
+    // Collect all .ely files in this package
+    let mut all_files = Vec::new();
+    collect_ely_files(pkg_dir, pkg_dir, &mut all_files)?;
+
+    // Make the entry file absolute
+    let entry_path = pkg_dir.join(entry_file);
+    if !entry_path.exists() {
+        // Entry not found, keep everything to be safe
+        report.scanned_files += all_files.len();
+        report.kept_files += all_files.len();
+        return Ok(());
+    }
+
+    // Build a temporary file list that only includes files from THIS package dir
+    let pkg_files: HashSet<PathBuf> = all_files.iter().cloned().collect();
+
+    // Find reachable files starting from the entry
+    let reachable = compute_reachable_from_entry(&entry_path, &pkg_files, pkg_dir)?;
+
+    // Remove unreachable files
+    for file_path in &all_files {
+        report.scanned_files += 1;
+        if reachable.contains(file_path) {
+            report.kept_files += 1;
+        } else if !dry_run {
+            std::fs::remove_file(file_path)
+                .map_err(|e| format!("Cannot remove {}: {}", file_path.display(), e))?;
+            report.removed_files += 1;
+            report.files_removed.push(file_path.clone());
+        } else {
+            report.removed_files += 1;
+            report.files_removed.push(file_path.clone());
+        }
+    }
+
+    Ok(())
 }
 
 /// Starting from `entry_path`, follow all `import` statements to find reachable `.ely` files.

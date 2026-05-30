@@ -1,0 +1,48 @@
+{
+  "name": "elysium-lang",
+  "displayName": "Elysium Language",
+  "description": "Syntax highlighting for Elysium — a human-friendly, AI-compatible programming language",
+  "version": "0.1.0",
+  "publisher": "SteveTran",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "keywords": [
+    "elysium",
+    "ely",
+    "elyx",
+    "language",
+    "syntax"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/imstevetran/ellysium-pl.git"
+  },
+  "contributes": {
+    "languages": [
+      {
+        "id": "elysium",
+        "aliases": ["Elysium", "elysium"],
+        "extensions": [".ely", ".elyx"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "elysium",
+        "scopeName": "source.elysium",
+        "path": "./syntaxes/elysium.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "elysium",
+        "path": "./snippets/elysium.json"
+      }
+    ]
+  }
+}

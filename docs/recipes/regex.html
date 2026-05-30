@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Regular Expressions — Elysium Recipes</title>
+  <meta name="description" content="Pattern matching with test, match, search, replace, and split in Elysium." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../assets/css/style.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>⚡</text></svg>" />
+</head>
+<body>
+  <header class="navbar">
+    <a href="../" class="logo"><svg viewBox="0 0 28 28" fill="none"><rect x="2" y="2" width="24" height="24" rx="6" stroke="%236c63ff" stroke-width="2" /><text x="14" y="20" text-anchor="middle" font-size="16" font-weight="bold" fill="%236c63ff">E</text></svg><span>Elysium</span></a>
+    <button class="menu-toggle" aria-label="Toggle menu"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
+    <nav>
+      <a href="../guide/">Guide</a>
+      <a href="../ui/">UI</a>
+      <a href="../std/">Std Lib</a>
+      <a href="../spec/">Spec</a>
+      <a href="../tooling/">Tooling</a>
+      <a href="../recipes/" class="active">Recipes</a>
+    </nav>
+  </header>
+  <main class="main">
+    <div class="breadcrumbs"><a href="../">Home</a> / <a href="./">Recipes</a> / <span>Regular Expressions</span></div>
+    <div class="page-header">
+      <h1>Regular Expressions</h1>
+      <p>POSIX extended regular expressions in Elysium. <span class="tag diff-intermediate">Intermediate</span></p>
+    </div>
+    <section class="content-section animate-on-scroll">
+      <h2>Available Functions</h2>
+<pre><code><span class="hl-kw">func</span> <span class="hl-fn">main</span>() {
+    <span class="hl-comment">// Test — does the pattern match anywhere?</span>
+    <span class="hl-kw">let</span> hasDigits = regex.test(<span class="hl-str">"\\d+"</span>, <span class="hl-str">"hello 123 world"</span>)
+    <span class="hl-comment">// hasDigits = true</span>
+
+    <span class="hl-comment">// Match — extract the first match</span>
+    <span class="hl-kw">let</span> matched = regex.match(<span class="hl-str">"\\d+"</span>, <span class="hl-str">"abc 456 def"</span>)
+    <span class="hl-comment">// matched = "456"</span>
+
+    <span class="hl-comment">// Search — find starting position of first match</span>
+    <span class="hl-kw">let</span> pos = regex.search(<span class="hl-str">"\\d+"</span>, <span class="hl-str">"abc 789 def"</span>)
+    <span class="hl-comment">// pos = 4</span>
+
+    <span class="hl-comment">// Replace — replace first occurrence</span>
+    <span class="hl-kw">let</span> replaced = regex.replace(<span class="hl-str">"foo"</span>, <span class="hl-str">"hello foo world"</span>, <span class="hl-str">"bar"</span>)
+    <span class="hl-comment">// replaced = "hello bar world"</span>
+
+    <span class="hl-comment">// Split — split string by pattern</span>
+    <span class="hl-kw">let</span> parts = regex.split(<span class="hl-str">","</span>, <span class="hl-str">"a,b,c"</span>)
+    <span class="hl-comment">// parts = "a,b,c" (comma-joined for now)</span>
+}</code></pre>
+    </section>
+    <section class="content-section animate-on-scroll">
+      <h2>Backend Details</h2>
+      <table>
+        <tr><th>Function</th><th>C Backend</th><th>JS Runtime</th></tr>
+        <tr><td><code>test</code></td><td><code>regcomp</code> + <code>regexec</code> → bool</td><td>Native <code>RegExp.test()</code></td></tr>
+        <tr><td><code>search</code></td><td><code>regexec</code> + <code>regmatch_t</code> → offset (or -1)</td><td>Native <code>RegExp.search()</code></td></tr>
+        <tr><td><code>match</code></td><td>Prints pattern/subject (dynamic alloc pending)</td><td>Native <code>RegExp.match()</code></td></tr>
+        <tr><td><code>replace</code></td><td>Prints pattern/subject (dynamic alloc pending)</td><td>Native <code>RegExp.replace()</code></td></tr>
+        <tr><td><code>split</code></td><td>Prints pattern/subject (dynamic alloc pending)</td><td>Native <code>RegExp.split()</code></td></tr>
+      </table>
+    </section>
+  </main>
+  <footer class="footer"><p>Elysium 2.0 &middot; <a href="https://github.com/imstevetran/elysium">GitHub</a></p></footer>
+  <script src="../assets/js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Language Guide — Elysium 2.0</title>
+  <meta name="description" content="Complete Elysium 2.0 syntax reference covering variables, functions, types, control flow, error handling, memory model, and concurrency." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../assets/css/style.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>⚡</text></svg>" />
+</head>
+<body>
+  <header class="navbar">
+    <a href="../" class="logo">
+      <svg viewBox="0 0 28 28" fill="none"><rect x="2" y="2" width="24" height="24" rx="6" stroke="%236c63ff" stroke-width="2" /><text x="14" y="20" text-anchor="middle" font-size="16" font-weight="bold" fill="%236c63ff">E</text></svg>
+      <span>Elysium</span>
+    </a>
+    <button class="menu-toggle" aria-label="Toggle menu">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+    </button>
+    <nav>
+      <a href="../guide/" class="active">Guide</a>
+      <a href="../ui/">UI</a>
+      <a href="../std/">Std Lib</a>
+      <a href="../spec/">Spec</a>
+      <a href="../tooling/">Tooling</a>
+      <a href="../recipes/">Recipes</a>
+    </nav>
+  </header>
+
+  <main class="main">
+    <div class="breadcrumbs">
+      <a href="../">Home</a> / <span>Language Guide</span>
+    </div>
+
+    <div class="page-header">
+      <h1>Language Guide</h1>
+      <p>Complete reference for the Elysium 2.0 programming language.</p>
+    </div>
+
+    <div class="toc">
+      <div class="toc-title">Table of Contents</div>
+      <ol class="toc-list">
+        <li><a href="#variables">Variables &amp; Mutability</a></li>
+        <li><a href="#strings">Strings &amp; Literals</a></li>
+        <li><a href="#functions">Functions</a></li>
+        <li><a href="#control-flow">Control Flow</a></li>
+        <li><a href="#types">Types</a></li>
+        <li><a href="#classes">Classes</a></li>
+        <li><a href="#error-handling">Error Handling</a></li>
+        <li><a href="#memory">Memory Model</a></li>
+        <li><a href="#concurrency">Concurrency</a></li>
+        <li><a href="#schedule">Schedule &amp; Wait</a></li>
+        <li><a href="#human-centric">Human-Centric Constructs</a></li>
+        <li><a href="#ai-docs">AI &amp; Documentation</a></li>
+        <li><a href="#modules">Modules &amp; Imports</a></li>
+        <li><a href="#quickref">Quick Reference</a></li>
+      </ol>
+    </div>
+
+    <!-- Variables -->
+    <section id="variables" class="content-section animate-on-scroll">
+      <h2>1. Variables &amp; Mutability</h2>
+      <p>Variables are declared with <code>let</code> (immutable) or <code>var</code> (mutable). Use <code>only let</code> for exclusive ownership.</p>
+
+      <table>
+        <tr><th>Keyword</th><th>Semantics</th></tr>
+        <tr><td><code>let</code></td><td>Immutable binding</td></tr>
+        <tr><td><code>var</code></td><td>Mutable binding</td></tr>
+        <tr><td><code>only let</code></td><td>Exclusive ownership (compile-time checked)</td></tr>
+      </table>
+
+<pre><code><span class="hl-kw">let</span> name = <span class="hl-str">"Alice"</span>        <span class="hl-comment">// immutable</span>
+<span class="hl-kw">var</span> count = <span class="hl-num">0</span>             <span class="hl-comment">// mutable</span>
+count = count + <span class="hl-num">1</span>
+
+<span class="hl-kw">only let</span> data = readFile(<span class="hl-str">"data.txt"</span>)   <span class="hl-comment">// exclusive ownership</span></code></pre>
+    </section>
+
+    <!-- Strings -->
+    <section id="strings" class="content-section animate-on-scroll">
+      <h2>2. Strings &amp; Literals</h2>
+
+      <h3>Standard Strings</h3>
+      <p>Double-quoted strings with escape sequences (<code>\n</code>, <code>\t</code>, <code>\"</code>, etc.).</p>
+<pre><code><span class="hl-kw">let</span> name = <span class="hl-str">"Alice"</span>
+<span class="hl-kw">let</span> escaped = <span class="hl-str">"Line1\nLine2"</span>
+<span class="hl-kw">let</span> quoted = <span class="hl-str">"She said \"hello\""</span></code></pre>
+
+      <h3>Backtick Strings (Multi-line)</h3>
+      <p>Backtick-delimited strings support multi-line content and double quotes without escaping. Perfect for JSON, HTML, or any text with embedded <code>"</code> characters.</p>
+<pre><code><span class="hl-comment">// Multi-line with embedded quotes</span>
+<span class="hl-kw">let</span> json = <span class="hl-str">`{
+    "name": "Elysium",
+    "version": "2.0"
+}`</span>
+
+<span class="hl-comment">// Single line with double quotes</span>
+<span class="hl-kw">let</span> html = <span class="hl-str">`&lt;div class="container"&gt;Hello&lt;/div&gt;`</span></code></pre>
+
+      <h3>Inline JSON / Record Literals</h3>
+      <p>Create object literals directly with <code>{ "key": value, ... }</code> syntax. Desugars to <code>__json_buildObject()</code> at compile time.</p>
+<pre><code><span class="hl-comment">// Inline JSON record</span>
+<span class="hl-kw">let</span> body = {
+    <span class="hl-str">"model"</span>: <span class="hl-str">"gpt-4o"</span>,
+    <span class="hl-str">"temperature"</span>: <span class="hl-str">"0.7"</span>,
+    <span class="hl-str">"max_tokens"</span>: <span class="hl-str">"100"</span>
+}
+
+<span class="hl-comment">// Combined with backtick strings for cleaner code</span>
+<span class="hl-kw">let</span> payload = { <span class="hl-str">"prompt"</span>: <span class="hl-str">`Tell me a story`</span> }</code></pre>
+
+      <h3><code>is</code> Operator — Runtime Type Check</h3>
+      <p>The <code>is</code> operator checks if a value is an instance of a given type or class at runtime:</p>
+<pre><code><span class="hl-kw">class</span> <span class="hl-type">Animal</span> {}
+<span class="hl-kw">class</span> <span class="hl-type">Dog</span> <span class="hl-kw">extends</span> <span class="hl-type">Animal</span> {}
+<span class="hl-kw">class</span> <span class="hl-type">Cat</span> <span class="hl-kw">extends</span> <span class="hl-type">Animal</span> {}
+
+<span class="hl-kw">let</span> pet = <span class="hl-type">Dog</span>()
+<span class="hl-kw">let</span> isDog = pet is <span class="hl-type">Dog</span>      <span class="hl-comment">// true</span>
+<span class="hl-kw">let</span> isAnimal = pet is <span class="hl-type">Animal</span>  <span class="hl-comment">// true (subclass)</span>
+<span class="hl-kw">let</span> isCat = pet is <span class="hl-type">Cat</span>       <span class="hl-comment">// false</span>
+
+<span class="hl-comment">// With primitive types</span>
+<span class="hl-kw">let</span> val = <span class="hl-str">"hello"</span>
+<span class="hl-kw">let</span> isStr = val is <span class="hl-type">String</span>   <span class="hl-comment">// true</span>
+<span class="hl-kw">let</span> isInt = val is <span class="hl-type">Int</span>      <span class="hl-comment">// false</span></code></pre>
+    </section>
+
+    <!-- Functions -->
+    <section id="functions" class="content-section animate-on-scroll">
+      <h2>3. Functions</h2>
+
+      <h3>Basic Functions</h3>
+<pre><code><span class="hl-comment">/// Summary: Add two integers.</span>
+<span class="hl-kw">func</span> <span class="hl-fn">add</span>(a: <span class="hl-type">Int</span>, b: <span class="hl-type">Int</span>) <span class="hl-op">-&gt;</span> <span class="hl-type">Int</span> {
+    a + b
+}
+
+<span class="hl-comment">// Single-expression body (no braces needed)</span>
+<span class="hl-kw">func</span> <span class="hl-fn">square</span>(x: <span class="hl-type">Int</span>) <span class="hl-op">-&gt;</span> <span class="hl-type">Int</span> { x * x }</code></pre>
+
+      <h3>Lambdas</h3>
+<pre><code><span class="hl-kw">let</span> square = (x) <span class="hl-op">-&gt;</span> x * x
+<span class="hl-kw">let</span> square = { x <span class="hl-op">-&gt;</span> x * x }</code></pre>
+
+      <h3>Rest Parameters</h3>
+<pre><code><span class="hl-kw">func</span> <span class="hl-fn">average</span>(<span class="hl-op">…</span>values: <span class="hl-type">Float</span>) <span class="hl-op">-&gt;</span> <span class="hl-type">Float</span> {
+    sum(values) / values.count
+}</code></pre>
+
+      <h3>Generic Functions</h3>
+<pre><code><span class="hl-kw">func</span> <span class="hl-fn">identity</span>&lt;T&gt;(x: T) <span class="hl-op">-&gt;</span> T { x }
+
+<span class="hl-kw">func</span> <span class="hl-fn">first</span>&lt;T&gt;(arr: [T]) <span class="hl-op">-&gt;</span> T? {
+    <span class="hl-kw">if</span> arr.isEmpty { <span class="hl-builtin">nil</span> }
+    <span class="hl-kw">else</span> { arr[<span class="hl-num">0</span>] }
+}</code></pre>
+
+      <h3>Private &amp; Lazy Modifiers</h3>
+<pre><code><span class="hl-kw">private func</span> <span class="hl-fn">helper</span>() <span class="hl-op">-&gt;</span> <span class="hl-type">Int</span> {
+    <span class="hl-kw">return</span> <span class="hl-num">42</span>
+}
+
+<span class="hl-kw">lazy func</span> <span class="hl-fn">expensiveComputation</span>() <span class="hl-op">-&gt;</span> <span class="hl-type">Int</span> {
+    <span class="hl-kw">return</span> helper() * <span class="hl-num">2</span>
+}
+
+<span class="hl-kw">private lazy func</span> <span class="hl-fn">cachedResult</span>() <span class="hl-op">-&gt;</span> <span class="hl-type">String</span> {
+    <span class="hl-kw">return</span> <span class="hl-str">"computed-lazy"</span>
+}</code></pre>
+
+      <h3>Stub Functions</h3>
+      <p>Stub functions declare an interface without a body. They can be filtered by environment at compile time.</p>
+<pre><code><span class="hl-comment">/// A stub available in all environments</span>
+<span class="hl-kw">func</span> <span class="hl-fn">placeholder</span>(x: <span class="hl-type">Int</span>) <span class="hl-op">-&gt;</span> <span class="hl-type">Int</span> <span class="hl-kw">stub</span>
+
+<span class="hl-comment">/// Only exists in local and dev environments</span>
+<span class="hl-kw">func</span> <span class="hl-fn">debugOnly</span>(key: <span class="hl-type">String</span>) <span class="hl-op">-&gt;</span> <span class="hl-type">String</span> <span class="hl-kw">stub</span>: [local, dev]</code></pre>
+    </section>
+
+    <!-- Control Flow -->
+    <section id="control-flow" class="content-section animate-on-scroll">
+      <h2>4. Control Flow</h2>
+
+      <h3>if / else</h3>
+<pre><code><span class="hl-comment">// Statement form</span>
+<span class="hl-kw">if</span> age &gt;= <span class="hl-num">18</span> {
+    print(<span class="hl-str">"Adult"</span>)
+} <span class="hl-kw">else</span> {
+    print(<span class="hl-str">"Minor"</span>)
+}
+
+<span class="hl-comment">// Expression form (returns a value)</span>
+<span class="hl-kw">let</span> status = <span class="hl-kw">if</span> age &gt;= <span class="hl-num">18</span> <span class="hl-kw">then</span> <span class="hl-str">"adult"</span> <span class="hl-kw">else</span> <span class="hl-str">"minor"</span></code></pre>
+
+      <h3>if … then Expression</h3>
+      <p>The <code>then</code> keyword is mandatory in expression form, avoiding ambiguity with statement <code>if</code>.</p>
+<pre><code><span class="hl-kw">let</span> status = <span class="hl-kw">if</span> age &gt;= <span class="hl-num">18</span> <span class="hl-kw">then</span> <span class="hl-str">"adult"</span> <span class="hl-kw">else</span> <span class="hl-str">"minor"</span>
+<span class="hl-kw">let</span> discount = <span class="hl-kw">if</span> total &gt; <span class="hl-num">100</span> <span class="hl-kw">then</span> <span class="hl-num">0.1</span> <span class="hl-kw">else</span> <span class="hl-num">0.0</span></code></pre>
+
+      <h3>for Loops</h3>
+<pre><code><span class="hl-kw">for</span> item <span class="hl-kw">in</span> [<span class="hl-num">1</span>, <span class="hl-num">2</span>, <span class="hl-num">3</span>, <span class="hl-num">4</span>] {
+    print(item)
+}
+
+<span class="hl-kw">for</span> i <span class="hl-kw">in</span> <span class="hl-num">1</span><span class="hl-op">…</span><span class="hl-num">5</span> {        <span class="hl-comment">// inclusive range: 1,2,3,4,5</span>
+    print(i)
+}
+
+<span class="hl-kw">for</span> i <span class="hl-kw">in</span> <span class="hl-num">1</span>..<span class="hl-num">5</span> {        <span class="hl-comment">// exclusive range: 1,2,3,4</span>
+    print(i)
+}</code></pre>
+
+      <h3>while Loops</h3>
+<pre><code><span class="hl-kw">while</span> condition {
+    <span class="hl-comment">// body</span>
+}</code></pre>
+
+      <h3>match (Pattern Matching)</h3>
+<pre><code><span class="hl-kw">match</span> value {
+    <span class="hl-kw">case</span> pattern =&gt; expression
+    <span class="hl-kw">case</span> pattern =&gt; expression
+}
+
+<span class="hl-comment">// Example with Result</span>
+<span class="hl-kw">let</span> result = parseNumber(<span class="hl-str">"42"</span>)
+<span class="hl-kw">match</span> result {
+    <span class="hl-kw">case</span> ok(num) =&gt; print(num)
+    <span class="hl-kw">case</span> err(msg) =&gt; print(<span class="hl-str">"Error: "</span> + msg)
+}</code></pre>
+
+      <h3>switch / case / then / else</h3>
+      <p>A human-friendly alias for <code>match</code> that reads like natural language.</p>
+<pre><code><span class="hl-kw">func</span> <span class="hl-fn">describe_score</span>(score: <span class="hl-type">Int</span>) <span class="hl-op">-&gt;</span> <span class="hl-type">String</span> {
+    <span class="hl-kw">return</span> <span class="hl-kw">switch</span> score {
+        <span class="hl-kw">case</span> <span class="hl-num">100</span> <span class="hl-kw">then</span> { <span class="hl-str">"Perfect!"</span> }
+        <span class="hl-kw">case</span> <span class="hl-num">90</span> <span class="hl-kw">then</span> { <span class="hl-str">"Excellent!"</span> }
+        <span class="hl-kw">case</span> <span class="hl-num">80</span> <span class="hl-kw">then</span> { <span class="hl-str">"Great!"</span> }
+        <span class="hl-kw">case</span> <span class="hl-num">70</span> <span class="hl-kw">then</span> { <span class="hl-str">"Good"</span> }
+        <span class="hl-kw">case</span> <span class="hl-num">60</span> <span class="hl-kw">then</span> { <span class="hl-str">"Passing"</span> }
+        <span class="hl-kw">else</span> { <span class="hl-str">"Needs improvement"</span> }
+    }
+}</code></pre>
+    </section>
+
+    <!-- Types -->
+    <section id="types" class="content-section animate-on-scroll">
+      <h2>5. Types</h2>
+
+      <h3>Primitive Types</h3>
+      <table>
+        <tr><th>Type</th><th>Description</th></tr>
+        <tr><td><code>Int</code></td><td>Integer</td></tr>
+        <tr><td><code>Float</code></td><td>Floating-point</td></tr>
+        <tr><td><code>Bool</code></td><td>Boolean (<code>true</code> / <code>false</code>)</td></tr>
+        <tr><td><code>String</code></td><td>Text string</td></tr>
+        <tr><td><code>Char</code></td><td>Single character</td></tr>
+      </table>
+
+      <h3>Compound Types</h3>
+      <table>
+        <tr><th>Type</th><th>Syntax / Example</th></tr>
+        <tr><td>Record / Struct</td><td><code>{ name: String, age: Int }</code></td></tr>
+        <tr><td>Enum (ADT)</td><td><code>enum Option&lt;T&gt; { Some(T), None }</code></td></tr>
+        <tr><td>Array</td><td><code>[T]</code> e.g. <code>[Int]</code></td></tr>
+        <tr><td>Tuple</td><td><code>(Int, String)</code></td></tr>
+        <tr><td>Union</td><td><code>Int | String</code></td></tr>
+        <tr><td>Option</td><td><code>T?</code> (sugar for <code>Option&lt;T&gt;</code>)</td></tr>
+        <tr><td>Result</td><td><code>Result&lt;T, E&gt;</code></td></tr>
+      </table>
+
+      <h3>Type Aliases</h3>
+<pre><code><span class="hl-kw">typealias</span> Name = <span class="hl-type">String</span></code></pre>
+
+      <h3>Enums (Algebraic Data Types)</h3>
+<pre><code><span class="hl-kw">enum</span> <span class="hl-type">Shape</span> {
+    <span class="hl-type">Circle</span>(radius: <span class="hl-type">Float</span>)
+    <span class="hl-type">Rectangle</span>(width: <span class="hl-type">Float</span>, height: <span class="hl-type">Float</span>)
+}
+
+<span class="hl-kw">func</span> <span class="hl-fn">area</span>(shape: <span class="hl-type">Shape</span>) <span class="hl-op">-&gt;</span> <span class="hl-type">Float</span> {
+    <span class="hl-kw">match</span> shape {
+        <span class="hl-kw">case</span> <span class="hl-type">Circle</span>(radius) =&gt; <span class="hl-num">3.14159</span> * radius * radius
+        <span class="hl-kw">case</span> <span class="hl-type">Rectangle</span>(w, h) =&gt; w * h
+    }
+}</code></pre>
+    </section>
+
+    <!-- Classes -->
+    <section id="classes" class="content-section animate-on-scroll">
+      <h2>6. Classes</h2>
+      <p>Classes support fields, methods, constructors (<code>init</code>), and access control with <code>private</code>.</p>
+<pre><code><span class="hl-kw">class</span> <span class="hl-type">Car</span> {
+    <span class="hl-kw">let</span> make
+    <span class="hl-kw">let</span> model
+
+    <span class="hl-fn">init</span>(make, model) {
+        <span class="hl-builtin">this</span>.make = make
+        <span class="hl-builtin">this</span>.model = model
+    }
+
+    <span class="hl-kw">func</span> <span class="hl-fn">drive</span>() {
+        print(<span class="hl-str">"Driving the "</span>, <span class="hl-builtin">this</span>.make, <span class="hl-str">" "</span>, <span class="hl-builtin">this</span>.model)
+    }
+}</code></pre>
+
+      <h3>Private Fields &amp; Methods</h3>
+<pre><code><span class="hl-kw">class</span> <span class="hl-type">User</span> {
+    <span class="hl-kw">let</span> name: <span class="hl-type">String</span>
+    <span class="hl-kw">private let</span> email: <span class="hl-type">String</span>
+
+    <span class="hl-fn">init</span>(name: <span class="hl-type">String</span>, email: <span class="hl-type">String</span>) {
+        <span class="hl-comment">// ...</span>
+    }
+
+    <span class="hl-kw">private func</span> <span class="hl-fn">validate</span>() <span class="hl-op">-&gt;</span> <span class="hl-type">Bool</span> {
+        <span class="hl-kw">return</span> <span class="hl-num">true</span>
+    }
+}</code></pre>
+    </section>
+
+    <!-- Error Handling -->
+    <section id="error-handling" class="content-section animate-on-scroll">
+      <h2>7. Error Handling</h2>
+
+      <h3>Try / Catch / Finally</h3>
+<pre><code><span class="hl-kw">try</span> {
+    performRiskyOperation()
+} <span class="hl-kw">catch</span> ErrorType.Network {
+    print(<span class="hl-str">"Network error occurred."</span>)
+} <span class="hl-keyword">finally</span> {
+    cleanup()
+}</code></pre>
+
+      <h3>Result Type</h3>
+<pre><code><span class="hl-kw">func</span> <span class="hl-fn">parseNumber</span>(s: <span class="hl-type">String</span>) <span class="hl-op">-&gt;</span> <span class="hl-type">Result</span>&lt;<span class="hl-type">Int</span>, <span class="hl-type">String</span>&gt; {
+    <span class="hl-kw">if</span> <span class="hl-kw">let</span> num = Int(s) {
+        <span class="hl-type">Result</span>.ok(num)
+    } <span class="hl-kw">else</span> {
+        <span class="hl-type">Result</span>.err(<span class="hl-str">"invalid number: "</span> + s)
+    }
+}
+
+<span class="hl-comment">// Error propagation with ?</span>
+<span class="hl-kw">let</span> value = doRisky()?   <span class="hl-comment">// returns early if Result is err</span></code></pre>
+    </section>
+
+    <!-- Memory Model -->
+    <section id="memory" class="content-section animate-on-scroll">
+      <h2>8. Memory Model</h2>
+      <p>Elysium uses <strong>Automatic Reference Counting (ARC)</strong> — no garbage collector pauses, deterministic deallocation.</p>
+      <ul>
+        <li><strong>ARC</strong> — Automatic Reference Counting (like Swift / Val)</li>
+        <li><strong>weak</strong> — Weak reference (does not increase retain count, auto-nilled)</li>
+        <li><strong>unowned</strong> — Unowned reference (does not increase retain count, assumes lifetime)</li>
+        <li><strong>only let</strong> — Exclusive ownership, compile-time checked, no aliasing</li>
+        <li><strong>unsafe { }</strong> — Opt-in block for raw pointers (use sparingly)</li>
+      </ul>
+    </section>
+
+    <!-- Concurrency -->
+    <section id="concurrency" class="content-section animate-on-scroll">
+      <h2>9. Concurrency</h2>
+
+      <h3>Async / Await</h3>
+<pre><code><span class="hl-comment">// Async function</span>
+<span class="hl-kw">async func</span> <span class="hl-fn">fetchData</span>() <span class="hl-op">-&gt;</span> <span class="hl-type">String</span> {
+    <span class="hl-kw">let</span> data = <span class="hl-kw">await</span> httpGet(<span class="hl-str">"https://example.com"</span>)
+    <span class="hl-kw">return</span> data
+}
+
+<span class="hl-comment">// Lightweight tasks</span>
+<span class="hl-kw">async</span> { producer(ch) }
+<span class="hl-kw">async</span> { consumer(ch) }</code></pre>
+
+      <h3>Channels</h3>
+<pre><code><span class="hl-kw">let</span> ch = <span class="hl-type">Channel</span>&lt;<span class="hl-type">Int</span>&gt;(capacity: <span class="hl-num">3</span>)
+
+<span class="hl-kw">async func</span> <span class="hl-fn">producer</span>(ch: <span class="hl-type">Channel</span>&lt;<span class="hl-type">Int</span>&gt;) {
+    <span class="hl-kw">for</span> i <span class="hl-kw">in</span> <span class="hl-num">1</span>..<span class="hl-num">5</span> {
+        <span class="hl-kw">await</span> ch.send(i)
+    }
+    ch.close()
+}
+
+<span class="hl-kw">async func</span> <span class="hl-fn">consumer</span>(ch: <span class="hl-type">Channel</span>&lt;<span class="hl-type">Int</span>&gt;) {
+    <span class="hl-kw">while</span> <span class="hl-kw">let</span> value = <span class="hl-kw">await</span> ch.receive() {
+        print(<span class="hl-str">"Got: "</span>, value)
+    }
+}</code></pre>
+
+      <h3>Parallel Blocks</h3>
+      <p>Each statement inside a <code>parallel</code> block runs in its own thread (using pthreads in the C backend, or <code>Promise.all</code> in the JS runtime).</p>
+<pre><code><span class="hl-kw">func</span> <span class="hl-fn">main</span>() {
+    <span class="hl-kw">parallel</span> {
+        print(<span class="hl-str">"task a\n"</span>)
+        print(<span class="hl-str">"task b\n"</span>)
+        print(<span class="hl-str">"task c\n"</span>)
+    }
+    print(<span class="hl-str">"all parallel tasks done\n"</span>)
+}</code></pre>
+
+      <h3>Select on Channels</h3>
+<pre><code><span class="hl-kw">select</span> {
+    <span class="hl-kw">case</span> msg = ch1 =&gt; handle(msg)
+    <span class="hl-kw">case</span> msg = ch2 =&gt; handle(msg)
+}</code></pre>
+    </section>
+
+    <!-- Schedule & Wait -->
+    <section id="schedule" class="content-section animate-on-scroll">
+      <h2>9. Schedule &amp; Wait</h2>
+
+      <h3>Schedule (Cron / Friendly Intervals)</h3>
+      <p>Run functions on a timer using <code>schedule "expr" func name() { }</code>. Supports standard cron expressions and friendly formats:</p>
+<pre><code><span class="hl-comment">// Friendly interval</span>
+<span class="hl-kw">schedule</span> <span class="hl-str">"every 10 minutes"</span> <span class="hl-kw">func</span> <span class="hl-fn">tick</span>() {
+    print(<span class="hl-str">"tick\n"</span>)
+}
+
+<span class="hl-comment">// Time of day</span>
+<span class="hl-kw">schedule</span> <span class="hl-str">"daily at 08:00"</span> <span class="hl-kw">func</span> <span class="hl-fn">morningRoutine</span>() {
+    print(<span class="hl-str">"good morning\n"</span>)
+}
+
+<span class="hl-comment">// Cron-style</span>
+<span class="hl-kw">schedule</span> <span class="hl-str">"*/5 * * * *"</span> <span class="hl-kw">func</span> <span class="hl-fn">cronJob</span>() {
+    print(<span class="hl-str">"every 5 minutes\n"</span>)
+}
+
+<span class="hl-comment">// Day of week</span>
+<span class="hl-kw">schedule</span> <span class="hl-str">"every Monday at 09:00"</span> <span class="hl-kw">func</span> <span class="hl-fn">weeklyStandup</span>() {
+    print(<span class="hl-str">"standup time!\n"</span>)
+}
+
+<span class="hl-comment">// Schedule can be combined with async</span>
+<span class="hl-kw">schedule</span> <span class="hl-str">"every hour"</span> <span class="hl-kw">async func</span> <span class="hl-fn">healthCheck</span>() {
+    <span class="hl-kw">let</span> status = <span class="hl-kw">await</span> httpGet(<span class="hl-str">"https://example.com/health"</span>)
+    console.log(status)
+}</code></pre>
+
+      <p>Supported cron aliases: <code>hourly</code>, <code>minutely</code>, <code>daily</code>, <code>weekly</code>, <code>monthly</code>. Each scheduled function runs in its own thread (pthreads on C backend, <code>setInterval</code> on JS runtime).</p>
+
+      <h3>Wait Statement</h3>
+      <p>Pause execution for a number of milliseconds:</p>
+<pre><code><span class="hl-kw">func</span> <span class="hl-fn">main</span>() {
+    print(<span class="hl-str">"starting...\n"</span>)
+    <span class="hl-kw">wait</span> <span class="hl-num">1000</span>    <span class="hl-comment">// pause 1 second</span>
+    print(<span class="hl-str">"done\n"</span>)
+}</code></pre>
+    </section>
+
+    <!-- Human-Centric Constructs -->
+    <section id="human-centric" class="content-section animate-on-scroll">
+      <h2>10. Human-Centric Constructs</h2>
+
+      <h3>bc / because — Inline Explanation &amp; Assertion</h3>
+      <p>The <code>bc</code> keyword serves dual purpose: as an assertion (runtime check) and as an annotation (metadata for AI / debugging).</p>
+<pre><code><span class="hl-comment">// Annotation (returns value unchanged, stores reason)</span>
+<span class="hl-kw">let</span> age = <span class="hl-num">18</span> <span class="hl-kw">bc</span> <span class="hl-str">"minimum voting age"</span>
+
+<span class="hl-comment">// Assertion (terminates if condition is false)</span>
+<span class="hl-kw">bc</span> age &gt;= <span class="hl-num">16</span>, <span class="hl-str">"You must be at least 16 to drive."</span>
+
+<span class="hl-comment">// On function declarations</span>
+<span class="hl-kw">func</span> <span class="hl-fn">discount</span>(age: <span class="hl-type">Int</span>, purchases: [<span class="hl-type">Float</span>]) <span class="hl-op">-&gt;</span> <span class="hl-type">Float</span> <span class="hl-kw">bc</span> <span class="hl-str">"Discount policy v3.2"</span></code></pre>
+
+      <h3>only — Guard / Exclusive Match / Ownership</h3>
+<pre><code><span class="hl-comment">// Guard in loops</span>
+<span class="hl-kw">for</span> item <span class="hl-kw">in</span> items {
+    <span class="hl-kw">only</span> item &gt; <span class="hl-num">0</span> <span class="hl-kw">do</span>
+        process(item)
+}
+
+<span class="hl-comment">// Exclusive pattern match</span>
+<span class="hl-kw">match</span> value {
+    <span class="hl-kw">only</span> <span class="hl-type">Int</span>   =&gt; print(<span class="hl-str">"exact integer"</span>)
+    <span class="hl-kw">only</span> <span class="hl-type">Float</span> =&gt; print(<span class="hl-str">"exact float"</span>)
+    _          =&gt; print(<span class="hl-str">"other"</span>)
+}</code></pre>
+
+      <h3>… (Ellipsis) — Range / Rest / Spread</h3>
+<pre><code><span class="hl-comment">// Range</span>
+<span class="hl-kw">for</span> i <span class="hl-kw">in</span> <span class="hl-num">1</span><span class="hl-op">…</span><span class="hl-num">5</span> { print(i) }   <span class="hl-comment">// 1,2,3,4,5</span>
+
+<span class="hl-comment">// Rest parameter</span>
+<span class="hl-kw">func</span> <span class="hl-fn">average</span>(<span class="hl-op">…</span>values: <span class="hl-type">Float</span>) <span class="hl-op">-&gt;</span> <span class="hl-type">Float</span> { sum(values) / values.count }
+
+<span class="hl-comment">// Spread into array</span>
+<span class="hl-kw">let</span> more = [<span class="hl-num">4</span>, <span class="hl-num">5</span>]
+<span class="hl-kw">let</span> all = [<span class="hl-num">1</span>, <span class="hl-num">2</span>, <span class="hl-num">3</span>, <span class="hl-op">…</span>more]   <span class="hl-comment">// [1,2,3,4,5]</span>
+
+<span class="hl-comment">// Destructuring with rest</span>
+<span class="hl-kw">let</span> (first, <span class="hl-op">…</span>rest) = (<span class="hl-num">1</span>, <span class="hl-num">2</span>, <span class="hl-num">3</span>, <span class="hl-num">4</span>)</code></pre>
+    </section>
+
+    <!-- AI & Documentation -->
+    <section id="ai-docs" class="content-section animate-on-scroll">
+      <h2>11. AI &amp; Documentation Standards</h2>
+      <p>Every module, function, and type <strong>must</strong> have a <code>/// Summary:</code> comment — enforced by the compiler for production code.</p>
+<pre><code><span class="hl-comment">/// Summary: Greet the user by name.</span>
+<span class="hl-comment">/// Parameters: name - the person to greet</span>
+<span class="hl-comment">/// Returns: a greeting string</span>
+<span class="hl-kw">func</span> <span class="hl-fn">greet</span>(name: <span class="hl-type">String</span>) <span class="hl-op">-&gt;</span> <span class="hl-type">String</span> {
+    <span class="hl-str">"Hello, "</span> + name + <span class="hl-str">"!"</span>
+}</code></pre>
+
+      <p>Recommended doc comment schema:</p>
+<pre><code><span class="hl-comment">/// Summary: &lt;one-line description&gt;</span>
+<span class="hl-comment">/// Parameters: &lt;param&gt; - &lt;description&gt;, ...</span>
+<span class="hl-comment">/// Returns: &lt;description&gt;</span></code></pre>
+    </section>
+
+    <!-- Modules & Imports -->
+    <section id="modules" class="content-section animate-on-scroll">
+      <h2>12. Modules &amp; Imports</h2>
+<pre><code><span class="hl-comment">// Basic import (items are inlined)</span>
+<span class="hl-kw">import</span> <span class="hl-str">"./math.ely"</span>
+
+<span class="hl-comment">// Aliased import (desugars alias.fn() to alias_fn())</span>
+<span class="hl-kw">import</span> <span class="hl-str">"./math.ely"</span> <span class="hl-kw">as</span> math
+
+<span class="hl-kw">let</span> a = <span class="hl-num">5</span>
+<span class="hl-kw">let</span> sq = math.square(a)
+<span class="hl-kw">let</span> db = math.double(a)</code></pre>
+    </section>
+
+    <!-- Full Example -->
+    <section class="content-section animate-on-scroll">
+      <h2>Full Example: Discount Calculator</h2>
+      <p>This example showcases many Elysium features in one function: <code>if … then</code>, <code>bc</code> annotations, <code>only</code> guards, <code>…</code> spread, and enforced doc comments.</p>
+<div class="code-header"><span>discount.ely</span></div>
+<pre><code><span class="hl-comment">/// Summary: Calculate discount for a customer.</span>
+<span class="hl-kw">func</span> <span class="hl-fn">discount</span>(age: <span class="hl-type">Int</span>, purchases: [<span class="hl-type">Float</span>]) <span class="hl-op">-&gt;</span> <span class="hl-type">Float</span> <span class="hl-kw">bc</span> <span class="hl-str">"Discount policy v3.2"</span> {
+    <span class="hl-kw">let</span> adultAge = <span class="hl-num">18</span> <span class="hl-kw">bc</span> <span class="hl-str">"legal adult age"</span>
+
+    <span class="hl-kw">only</span> age &gt; <span class="hl-num">0</span> <span class="hl-kw">do</span> {
+        <span class="hl-kw">let</span> base = <span class="hl-kw">if</span> age &gt;= adultAge <span class="hl-kw">then</span> <span class="hl-num">0.10</span> <span class="hl-kw">else</span> <span class="hl-num">0.05</span>
+        <span class="hl-kw">let</span> total = sum(<span class="hl-op">…</span>purchases) <span class="hl-kw">bc</span> <span class="hl-str">"total of all purchases"</span>
+        <span class="hl-kw">let</span> extra = <span class="hl-kw">if</span> total &gt; <span class="hl-num">500</span> <span class="hl-kw">then</span> <span class="hl-num">0.05</span> <span class="hl-kw">else</span> <span class="hl-num">0.0</span>
+        min(base + extra, <span class="hl-num">0.20</span>)
+    }
+}</code></pre>
+    </section>
+
+    <!-- Quick Reference -->
+    <section id="quickref" class="content-section animate-on-scroll">
+      <h2>13. Quick Reference</h2>
+      <table>
+        <tr><th>Construct</th><th>Syntax</th></tr>
+        <tr><td>Immutable variable</td><td><code>let name = value</code></td></tr>
+        <tr><td>Mutable variable</td><td><code>var name = value</code></td></tr>
+        <tr><td>Exclusive ownership</td><td><code>only let name = value</code></td></tr>
+        <tr><td>Function</td><td><code>func name(p: Type) -> Ret { body }</code></td></tr>
+        <tr><td>Lambda</td><td><code>(x) -> expr</code> or <code>{ x -> expr }</code></td></tr>
+        <tr><td>Rest parameters</td><td><code>func name(…p: Type)</code></td></tr>
+        <tr><td>If expression</td><td><code>if cond then expr else expr</code></td></tr>
+        <tr><td>For loop</td><td><code>for item in collection { }</code></td></tr>
+        <tr><td>While loop</td><td><code>while cond { }</code></td></tr>
+        <tr><td>Match</td><td><code>match val { case pat => expr }</code></td></tr>
+        <tr><td>Switch</td><td><code>switch val { case pat then { } else { } }</code></td></tr>
+        <tr><td>Range (inclusive)</td><td><code>start…end</code></td></tr>
+        <tr><td>Range (exclusive)</td><td><code>start..end</code></td></tr>
+        <tr><td>Spread</td><td><code>…collection</code></td></tr>
+        <tr><td>Try / catch / finally</td><td><code>try { } catch pat { } finally { }</code></td></tr>
+        <tr><td>Error propagation</td><td><code>expr?</code></td></tr>
+        <tr><td>Async function</td><td><code>async func name() { }</code></td></tr>
+        <tr><td>Await</td><td><code>await task</code></td></tr>
+        <tr><td>Channel</td><td><code>Channel&lt;T&gt;(capacity: N)</code></td></tr>
+        <tr><td>Explain / assert</td><td><code>expr bc "reason"</code> / <code>bc cond, "msg"</code></td></tr>
+        <tr><td>Guard</td><td><code>only cond do { }</code></td></tr>
+        <tr><td>Ownership</td><td><code>only let x = expr</code></td></tr>
+        <tr><td>Unsafe block</td><td><code>unsafe { }</code></td></tr>
+        <tr><td>Component</td><td><code>component Name { state x = v; View { } }</code></td></tr>
+        <tr><td>Doc comment</td><td><code>/// Summary: ...</code></td></tr>
+        <tr><td>Type alias</td><td><code>typealias Name = ExistingType</code></td></tr>
+        <tr><td>Generic</td><td><code>func name&lt;T&gt;(x: T) -> T</code></td></tr>
+        <tr><td>Option type</td><td><code>T?</code></td></tr>
+        <tr><td>Result type</td><td><code>Result&lt;T, E&gt;</code></td></tr>
+        <tr><td>Union type</td><td><code>A | B</code></td></tr>
+        <tr><td>Backtick string</td><td><code>`multi-line with "quotes"`</code></td></tr>
+        <tr><td>Inline JSON / Record</td><td><code>{ "key": value }</code></td></tr>
+        <tr><td>Runtime type check</td><td><code>expr is TypeName</code></td></tr>
+        <tr><td>Schedule function</td><td><code>schedule "cron" func name() { }</code></td></tr>
+        <tr><td>Wait (milliseconds)</td><td><code>wait 1000</code></td></tr>
+      </table>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>Elysium 2.0 &middot; <a href="https://github.com/imstevetran/elysium">GitHub</a></p>
+  </footer>
+
+  <script src="../assets/js/main.js"></script>
+</body>
+</html>

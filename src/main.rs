@@ -9,11 +9,16 @@ mod highlighter;
 mod hir;
 mod lexer;
 mod linter;
+mod manifest;
 mod mir;
+mod migrate;
 mod module;
 mod ownership;
 mod parser;
+mod port;
+mod test_runner;
 mod type_checker;
+mod update;
 
 use clap::Parser;
 use std::collections::HashMap;
@@ -68,8 +73,23 @@ fn main() {
         cli::Commands::DepGraph { file, format, output } => {
             dep_graph_file(file, format, output)
         }
+        cli::Commands::Test { path, dry_run, env } => {
+            cmd_test(path, *dry_run, &resolve_env_alias(
+                &path.as_ref().cloned().unwrap_or_else(|| PathBuf::from("tests/")),
+                env,
+            ))
+        }
+        cli::Commands::Update { package, apply, latest, force } => {
+            update::cmd_update(package.as_deref(), *apply, *latest, *force)
+        }
+        cli::Commands::Migrate { file, check, dry_run, force } => {
+            migrate::cmd_migrate(file.as_ref(), *check, *dry_run, *force)
+        }
         cli::Commands::GenTest { file, output } => {
             gen_test_file(file, output)
+        }
+        cli::Commands::Port { file, output, lang } => {
+            port_file(file, output, lang)
         }
     };
 
@@ -238,8 +258,14 @@ fn desugar_module_calls_in_stmt(stmt: &mut ast::Node<ast::Stmt>, aliases: &std::
             desugar_module_calls_in_expr(&mut boxed.value.expr.value, aliases);
         }
         ast::Stmt::Todo(_) | ast::Stmt::Question(_) => {},
+        ast::Stmt::Wait(_) => {},
         ast::Stmt::Bench(boxed) => {
             desugar_module_calls_in_block(&mut boxed.value.body, aliases);
+        }
+        ast::Stmt::Parallel(boxed) => {
+            for item in &mut boxed.value.items {
+                desugar_module_calls_in_stmt(item, aliases);
+            }
         }
     }
 }
@@ -336,22 +362,118 @@ fn desugar_module_calls_in_expr(expr: &mut ast::Expr, aliases: &std::collections
         ast::Expr::ErrorPropagate(inner) => {
             desugar_module_calls_in_expr(&mut inner.value, aliases);
         }
+        ast::Expr::Await(inner) => {
+            desugar_module_calls_in_expr(&mut inner.value, aliases);
+        }
         ast::Expr::MatchExpression { value, arms } => {
             desugar_module_calls_in_expr(&mut value.value, aliases);
             for arm in arms {
                 desugar_module_calls_in_block(&mut arm.body, aliases);
             }
         }
+        ast::Expr::Is { value, .. } => {
+            desugar_module_calls_in_expr(&mut value.value, aliases);
+        }
     }
+}
+
+/// Walk up from `dir` to find the project root (directory containing elysium.json).
+fn find_project_root(dir: &std::path::Path) -> Option<PathBuf> {
+    manifest::find_project_root(dir)
 }
 
 /// Try to resolve an import path relative to the source directory.
 /// Supports:
-///   import "./foo.ely"
-///   import "./foo"
-///   import "./sub/bar"
+///   import "./foo.ely"       — relative to importing file
+///   import "@/foo"             — relative to project root
+///   import "@/sub/bar"
+///   import "#/package"        — package in the project's packages/ directory
 fn find_import_file(from_dir: &std::path::Path, import_path: &str) -> std::result::Result<PathBuf, String> {
     let clean = import_path.trim().trim_matches('"');
+
+    // Resolve @/ prefix: relative to project root
+    if let Some(rest) = clean.strip_prefix("@/") {
+        let root = find_project_root(from_dir)
+            .ok_or_else(|| format!("cannot find project root (elysium.json) from `{}`", from_dir.display()))?;
+        let candidate = root.join(rest);
+        // Try exact path
+        if candidate.exists() {
+            return Ok(candidate);
+        }
+        // Try with .ely extension
+        let with_ely = root.join(format!("{}.ely", rest.trim_end_matches(".elyx")));
+        if with_ely.exists() {
+            return Ok(with_ely);
+        }
+        // Try with .elyx extension
+        let with_elyx = root.join(format!("{}.elyx", rest.trim_end_matches(".ely")));
+        if with_elyx.exists() {
+            return Ok(with_elyx);
+        }
+        return Err(format!(
+            "cannot find import `{}` (tried: {}, {}, {})",
+            clean,
+            candidate.display(),
+            with_ely.display(),
+            with_elyx.display()
+        ));
+    }
+
+    // Resolve #/ prefix: package installed from the registry (into elysium_modules/)
+    if let Some(pkg_name) = clean.strip_prefix("#/") {
+        let root = find_project_root(from_dir)
+            .ok_or_else(|| format!("cannot find project root (elysium.json) from `{}`", from_dir.display()))?;
+        let mods_dir = root.join("elysium_modules");
+        let pkg_dir = mods_dir.join(pkg_name);
+
+        // Try elysium_modules/<name>/<entry> from manifest
+        let manifest_path = pkg_dir.join("elysium.json");
+        if manifest_path.exists() {
+            // Read manifest to find entry file
+            if let Ok(content) = std::fs::read_to_string(&manifest_path) {
+                if let Ok(manifest) = serde_json::from_str::<HashMap<String, serde_json::Value>>(&content) {
+                    let entry = manifest.get("entry")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("main.ely");
+                    let entry_path = pkg_dir.join(entry);
+                    if entry_path.exists() {
+                        return Ok(entry_path);
+                    }
+                }
+            }
+        }
+        // Fallback: try elysium_modules/<name>/main.ely
+        let main_path = pkg_dir.join("main.ely");
+        if main_path.exists() {
+            return Ok(main_path);
+        }
+        // Fallback: try elysium_modules/<name>.ely
+        let single_path = mods_dir.join(format!("{}.ely", pkg_name));
+        if single_path.exists() {
+            return Ok(single_path);
+        }
+        // Fallback: try packages/<name>.ely (development: packages/ dir)
+        let pkg_path = root.join("packages").join(format!("{}.ely", pkg_name));
+        if pkg_path.exists() {
+            return Ok(pkg_path);
+        }
+        // Fallback: try packages/<name>/main.ely (development: subdirectory)
+        let pkg_dir_path = root.join("packages").join(pkg_name).join("main.ely");
+        if pkg_dir_path.exists() {
+            return Ok(pkg_dir_path);
+        }
+        return Err(format!(
+            "cannot find package `{}` (tried: {}, {}, {}, {}, {})",
+            pkg_name,
+            pkg_dir.display(),
+            main_path.display(),
+            single_path.display(),
+            pkg_path.display(),
+            pkg_dir_path.display()
+        ));
+    }
+
+    // Regular relative path
     let candidate = from_dir.join(clean);
 
     // Try exact path
@@ -461,6 +583,84 @@ fn compile_and_run(file: &PathBuf, debug_enabled: bool, emit_ir: bool, env: &str
     Ok(())
 }
 
+fn cmd_test(path: &Option<PathBuf>, dry_run: bool, env: &str) -> error::Result<()> {
+    let test_path = path.as_ref().cloned().unwrap_or_else(|| PathBuf::from("tests/"));
+
+    // Collect files to test
+    let files: Vec<PathBuf> = if test_path.is_dir() {
+        test_runner::find_test_files(&test_path)
+    } else if test_path.exists() {
+        vec![test_path]
+    } else {
+        let default_dir = PathBuf::from("tests/");
+        if default_dir.is_dir() {
+            test_runner::find_test_files(&default_dir)
+        } else {
+            println!("No test files found at {:?}.", test_path);
+            return Ok(());
+        }
+    };
+
+    if files.is_empty() {
+        println!("No test files found.");
+        return Ok(());
+    }
+
+    if dry_run {
+        for file in &files {
+            println!("[{}]", file.display());
+            let source = read_source(file)?;
+            let report = test_runner::list_tests(&source)?;
+            println!("{}", report);
+        }
+        return Ok(());
+    }
+
+    let mut all_passed = true;
+
+    for file in &files {
+        println!("[{}]", file.display());
+        let source = read_source(file)?;
+
+        // Parse with imports
+        let (mut source, mut program) = if has_imports(file)? {
+            let (src, p, aliases) = load_with_imports(file)?;
+            (src, filter_stubs(p, &aliases, env))
+        } else {
+            let mut parser = parser::Parser::new(&source);
+            let p = parser.parse_program()?;
+            let p = filter_stubs_raw(p, env);
+            (source, p)
+        };
+        desugar_builtin_calls(&mut program);
+
+        // Validate all specs via type-checking
+        match test_runner::run_tests_in_file(&source, &mut program) {
+            Ok(passed) => {
+                if !passed {
+                    all_passed = false;
+                }
+            }
+            Err(e) => {
+                eprintln!("  Error checking tests: {}", e.message);
+                all_passed = false;
+            }
+        }
+    }
+
+    println!(
+        "\nSummary: {} across {} file(s)",
+        if all_passed { "ALL TESTS PASSED ✓" } else { "SOME TESTS FAILED ✗" },
+        files.len()
+    );
+
+    if all_passed {
+        Ok(())
+    } else {
+        Err(error::CompileError::new("Some tests failed"))
+    }
+}
+
 fn check_file(file: &PathBuf, env: &str) -> error::Result<()> {
     let (source, mut program) = if has_imports(file)? {
         let (src, p, aliases) = load_with_imports(file)?;
@@ -488,23 +688,7 @@ fn check_file(file: &PathBuf, env: &str) -> error::Result<()> {
 /// Supports built-in envs (local, dev, test, prod) and custom aliases
 /// defined in the `environments` field of the manifest.
 fn resolve_env_alias(file: &PathBuf, env: &str) -> String {
-    // Look for elysium.json in the same directory as the source file
-    let dir = file.parent().unwrap_or(Path::new("."));
-    let manifest_path = dir.join("elysium.json");
-    if let Ok(content) = fs::read_to_string(manifest_path) {
-        if let Ok(manifest) = serde_json::from_str::<HashMap<String, serde_json::Value>>(&content) {
-            if let Some(envs) = manifest.get("environments") {
-                if let Some(alias_map) = envs.as_object() {
-                    if let Some(resolved) = alias_map.get(env) {
-                        if let Some(val) = resolved.as_str() {
-                            return val.to_string();
-                        }
-                    }
-                }
-            }
-        }
-    }
-    env.to_string()
+    manifest::resolve_env_alias(file, env)
 }
 
 /// Filter out stub functions that don't match the target environment.
@@ -590,8 +774,14 @@ fn desugar_builtin_in_stmt(stmt: &mut ast::Node<ast::Stmt>) {
             desugar_builtin_in_expr(&mut boxed.value.expr.value);
         }
         ast::Stmt::Todo(_) | ast::Stmt::Question(_) => {}
+        ast::Stmt::Wait(_) => {}
         ast::Stmt::Bench(boxed) => {
             desugar_builtin_in_block(&mut boxed.value.body);
+        }
+        ast::Stmt::Parallel(boxed) => {
+            for item in &mut boxed.value.items {
+                desugar_builtin_in_stmt(item);
+            }
         }
     }
 }
@@ -622,14 +812,23 @@ fn desugar_builtin_in_expr(expr: &mut ast::Expr) {
             // Check if object is "console" → desugar to __console_<method>
             // or "fs" → desugar to __fs_<method>
             if let ast::Expr::Identifier(obj_name) = &object.value {
-                let prefix = match obj_name.as_str() {
-                    "console" => "__console_",
-                    "fs" => "__fs_",
-                    "transport" => "__transport_",
-                    "string" => "__string_",
-                    "regex" => "__regex_",
-                    "datetime" => "__datetime_",
-                    _ => "",
+            let prefix = match obj_name.as_str() {
+                "console" => "__console_",
+                "fs" => "__fs_",
+                "transport" => "__transport_",
+                "string" => "__string_",
+                "regex" => "__regex_",
+                "datetime" => "__datetime_",
+                "auth" => "__auth_",
+                "langchain" => "__langchain_",
+                "langgraph" => "__langgraph_",
+                "dict" => "__dict_",
+                "json" => "__json_",
+                "math" => "__math_",
+                "env" => "__env_",
+                "http" => "__http_",
+                "worker" => "__worker_",
+                _ => "",
                 };
                 if !prefix.is_empty() {
                     let aliased_name = format!("{}{}", prefix, method);
@@ -691,9 +890,31 @@ fn desugar_builtin_in_expr(expr: &mut ast::Expr) {
             }
         }
         ast::Expr::Record(fields) => {
-            for (_, e) in fields {
+            // First desugar all values in the record
+            for (_, e) in fields.iter_mut() {
                 desugar_builtin_in_expr(&mut e.value);
             }
+            // Then transform Record {"k1": v1, "k2": v2} into json.buildObject("k1", v1, "k2", v2)
+            let mut new_args = Vec::new();
+            for (key, val) in fields.iter() {
+                new_args.push(ast::Node::new(
+                    ast::Expr::Literal(ast::Node::new(ast::Literal::String(key.clone()), crate::error::SourceSpan::new(0, 0))),
+                    crate::error::SourceSpan::new(0, 0),
+                ));
+                new_args.push(ast::Node::new(
+                    val.value.clone(),
+                    crate::error::SourceSpan::new(0, 0),
+                ));
+            }
+            let mut old_args = Vec::new();
+            std::mem::swap(&mut old_args, &mut new_args);
+            *expr = ast::Expr::Call {
+                callee: Box::new(ast::Node::new(
+                    ast::Expr::Identifier("__json_buildObject".into()),
+                    crate::error::SourceSpan::new(0, 0),
+                )),
+                args: old_args,
+            };
         }
         ast::Expr::Index { target, index } => {
             desugar_builtin_in_expr(&mut target.value);
@@ -711,6 +932,26 @@ fn desugar_builtin_in_expr(expr: &mut ast::Expr) {
         }
         ast::Expr::ErrorPropagate(inner) => {
             desugar_builtin_in_expr(&mut inner.value);
+        }
+        ast::Expr::Await(inner) => {
+            desugar_builtin_in_expr(&mut inner.value);
+        }
+        ast::Expr::Is { value, type_name } => {
+            desugar_builtin_in_expr(&mut value.value);
+            let type_name_lit = ast::Expr::Literal(ast::Node::new(
+                ast::Literal::String(type_name.clone()),
+                crate::error::SourceSpan::new(0, 0),
+            ));
+            *expr = ast::Expr::Call {
+                callee: Box::new(ast::Node::new(
+                    ast::Expr::Identifier("__is_instanceof".into()),
+                    crate::error::SourceSpan::new(0, 0),
+                )),
+                args: vec![
+                    ast::Node::new(value.value.clone(), crate::error::SourceSpan::new(0, 0)),
+                    ast::Node::new(type_name_lit, crate::error::SourceSpan::new(0, 0)),
+                ],
+            };
         }
         ast::Expr::MatchExpression { value, arms } => {
             desugar_builtin_in_expr(&mut value.value);
@@ -991,6 +1232,10 @@ fn gen_test_file(file: &PathBuf, output: &Option<PathBuf>) -> error::Result<()> 
     }
 }
 
+fn port_file(file: &PathBuf, output: &Option<PathBuf>, lang: &Option<String>) -> error::Result<()> {
+    port::port_file(file.as_path(), output.as_ref().map(|p| p.as_path()), lang)
+}
+
 #[cfg(test)]
 mod integration_tests {
     use super::*;
@@ -1099,6 +1344,10 @@ mod integration_tests {
     #[test]
     #[ignore]
     fn test_integration_counter_elyx_check() { assert_check_ok("examples/counter.elyx"); }
+
+    #[test]
+    #[ignore]
+    fn test_integration_async_parallel_check() { assert_check_ok("examples/async_parallel.ely"); }
 
     #[test]
     #[ignore]

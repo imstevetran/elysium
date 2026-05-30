@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use crate::manifest::{Manifest, RegistryEntry};
+use crate::manifest::{Manifest, RegistryEntry, RegistryIndex};
 
 const REGISTRY_URL: &str = "https://github.com/imstevetran/epm-registry.git";
 const REGISTRY_DIR_NAME: &str = ".epm-registry";
@@ -52,15 +52,20 @@ pub fn read_registry_index() -> Result<HashMap<String, RegistryEntry>, String> {
     let index_path = registry_dir.join(REGISTRY_INDEX_FILE);
     let content = std::fs::read_to_string(&index_path)
         .map_err(|e| format!("Cannot read registry index: {}", e))?;
-    let index: HashMap<String, RegistryEntry> = serde_json::from_str(&content)
+    // The index is stored as {"packages": {...}}
+    let index_wrapper: RegistryIndex = serde_json::from_str(&content)
         .map_err(|e| format!("Cannot parse registry index: {}", e))?;
-    Ok(index)
+    Ok(index_wrapper.packages)
 }
 
 /// Write the registry index back to the cloned registry and push.
 fn write_and_push_registry(index: &HashMap<String, RegistryEntry>, registry_dir: &Path) -> Result<(), String> {
     let index_path = registry_dir.join(REGISTRY_INDEX_FILE);
-    let json = serde_json::to_string_pretty(index)
+    // Serialize with the {"packages": ...} wrapper
+    let index_wrapper = RegistryIndex {
+        packages: index.clone(),
+    };
+    let json = serde_json::to_string_pretty(&index_wrapper)
         .map_err(|e| format!("Cannot serialize registry: {}", e))?;
     std::fs::write(&index_path, json)
         .map_err(|e| format!("Cannot write registry index: {}", e))?;
@@ -91,6 +96,19 @@ fn write_and_push_registry(index: &HashMap<String, RegistryEntry>, registry_dir:
     Ok(())
 }
 
+/// Determine the relative path for a package tarball within the packages directory.
+/// Scoped packages (e.g. @org/name) are stored in a subdirectory: packages/@org/name-0.1.0.tar.gz.
+fn tarball_rel_path(name: &str, version: &str) -> PathBuf {
+    if let Some(scope) = name.strip_prefix('@') {
+        if let Some(slash) = scope.find('/') {
+            let org = &scope[..slash];
+            let pkg = &scope[slash + 1..];
+            return PathBuf::from(format!("@{}/", org)).join(format!("{}-{}.tar.gz", pkg, version));
+        }
+    }
+    PathBuf::from(format!("{}-{}.tar.gz", name, version))
+}
+
 /// Publish a package tarball to the registry.
 pub fn publish_package(
     manifest: &Manifest,
@@ -103,8 +121,13 @@ pub fn publish_package(
     std::fs::create_dir_all(&packages_dir)
         .map_err(|e| format!("Cannot create packages dir: {}", e))?;
 
-    let tarball_name = format!("{}-{}.tar.gz", manifest.name, manifest.version);
-    let dest = packages_dir.join(&tarball_name);
+    let rel = tarball_rel_path(&manifest.name, &manifest.version);
+    let dest = packages_dir.join(&rel);
+    // Ensure parent directory for scoped packages (e.g. packages/@org/)
+    if let Some(parent) = dest.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Cannot create directory {}: {}", parent.display(), e))?;
+    }
     std::fs::copy(tarball_path, &dest)
         .map_err(|e| format!("Cannot copy tarball to registry: {}", e))?;
 
@@ -152,11 +175,11 @@ pub fn install_package(
             .clone(),
     };
 
-    let tarball_name = format!("{}-{}.tar.gz", name, ver);
-    let tarball_path = registry_dir.join(PACKAGES_DIR).join(&tarball_name);
+    let rel = tarball_rel_path(name, &ver);
+    let tarball_path = registry_dir.join(PACKAGES_DIR).join(&rel);
 
     if !tarball_path.exists() {
-        return Err(format!("Tarball {}/{} not found in registry", name, ver));
+        return Err(format!("Tarball {}/{} not found in registry (expected {})", name, ver, rel.display()));
     }
 
     // Extract tarball into output_dir

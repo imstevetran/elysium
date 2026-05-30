@@ -1,0 +1,122 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  ##############################################################################
+  # Build native binaries for each supported platform
+  ##############################################################################
+  build-binaries:
+    name: Build binary (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            llvm_install: |
+              sudo apt-get update && sudo apt-get install -y llvm-18-dev libclang-18-dev
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            llvm_install: brew install llvm@18
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            llvm_install: choco install llvm --version=18.1.0
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install LLVM 18
+        run: ${{ matrix.llvm_install }}
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Add cross-compilation target
+        run: rustup target add ${{ matrix.target }}
+
+      - name: Build binary
+        working-directory: npm-package
+        run: node scripts/build-binaries.js
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binary-${{ matrix.target }}
+          path: npm-package/dist/*.gz
+
+  ##############################################################################
+  # Create a GitHub Release and attach all binary tarballs
+  ##############################################################################
+  create-release:
+    name: Create GitHub Release
+    needs: build-binaries
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: binary-*
+          merge-multiple: true
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: *.gz
+          generate_release_notes: true
+
+  ##############################################################################
+  # Publish the npm package via Trusted Publishing (OIDC).
+  # No NPM_TOKEN needed — the npm CLI auto-detects the OIDC environment.
+  # Requires npm >= 11.5.1 (shipped with Node >= 22.14.0).
+  ##############################################################################
+  publish-npm:
+    name: Publish to npm
+    needs: create-release
+    permissions:
+      id-token: write
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Publish package
+        working-directory: npm-package
+        run: npm publish
+
+  ##############################################################################
+  # Deploy the static docs site to GitHub Pages
+  ##############################################################################
+  deploy-pages:
+    name: Deploy GitHub Pages
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

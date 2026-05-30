@@ -1,0 +1,105 @@
+/// Summary: Zigbee Home Automation operations, pure Elysium.
+/// Uses transport.post() to delegate to the JS runtime (zigbee.js).
+/// Survives both UI and backend builds — no compiler-level builtins.
+
+/// Start the Zigbee coordinator / network.
+func start() {
+    transport.post("__zigbee__/start", "")
+}
+
+/// Shut down the Zigbee coordinator.
+func shutdown() {
+    transport.post("__zigbee__/shutdown", "")
+}
+
+/// Permit devices to join the network for N seconds.
+func permitJoin(seconds: Int) {
+    transport.post("__zigbee__/permitJoin", seconds)
+}
+
+/// Scan for nearby Zigbee networks.
+func scan() {
+    transport.post("__zigbee__/scan", "")
+}
+
+/// Turn on a Zigbee device/cluster.
+/// deviceId: IEEE address, endpoint: endpoint number, cluster: cluster name
+func on(deviceId: String, endpoint: Int, cluster: String) {
+    transport.post("__zigbee__/on", deviceId + "|||" + endpoint + "|||" + cluster)
+}
+
+/// Turn off a Zigbee device/cluster.
+func off(deviceId: String, endpoint: Int, cluster: String) {
+    transport.post("__zigbee__/off", deviceId + "|||" + endpoint + "|||" + cluster)
+}
+
+/// Toggle a Zigbee device/cluster.
+func toggle(deviceId: String, endpoint: Int, cluster: String) {
+    transport.post("__zigbee__/toggle", deviceId + "|||" + endpoint + "|||" + cluster)
+}
+
+/// Read an attribute from a Zigbee device.
+/// Returns the attribute value as a string.
+func readAttribute(deviceId: String, endpoint: Int, cluster: String, attribute: String) -> String {
+    transport.post("__zigbee__/readAttribute", deviceId + "|||" + endpoint + "|||" + cluster + "|||" + attribute)
+}
+
+/// Write an attribute to a Zigbee device.
+func writeAttribute(deviceId: String, endpoint: Int, cluster: String, attribute: String, value: String) {
+    transport.post("__zigbee__/writeAttribute", deviceId + "|||" + endpoint + "|||" + cluster + "|||" + attribute + "|||" + value)
+}
+
+/// Add a device to a group.
+func addToGroup(deviceId: String, groupId: Int) {
+    transport.post("__zigbee__/addToGroup", deviceId + "|||" + groupId)
+}
+
+/// Remove a device from a group.
+func removeFromGroup(deviceId: String, groupId: Int) {
+    transport.post("__zigbee__/removeFromGroup", deviceId + "|||" + groupId)
+}
+
+/// Bind two Zigbee devices together.
+func bind(sourceDevId: String, sourceEp: Int, destDevId: String, destEp: Int) {
+    transport.post("__zigbee__/bind", sourceDevId + "|||" + sourceEp + "|||" + destDevId + "|||" + destEp)
+}
+
+/// Get the human-readable name of a Zigbee device.
+func getDeviceName(deviceId: String) -> String {
+    transport.post("__zigbee__/getDeviceName", deviceId)
+}
+
+/// Get the manufacturer name of a Zigbee device.
+func getManufacturer(deviceId: String) -> String {
+    transport.post("__zigbee__/getManufacturer", deviceId)
+}
+
+/// Get the number of paired Zigbee devices.
+func getDeviceCount() -> Int {
+    transport.post("__zigbee__/getDeviceCount", "")
+}
+
+/// Get the current PAN (Personal Area Network) ID.
+func getPanId() -> Int {
+    transport.post("__zigbee__/getPanId", "")
+}
+
+/// Get the current Zigbee channel number.
+func getChannel() -> Int {
+    transport.post("__zigbee__/getChannel", "")
+}
+
+/// Check if the coordinator is joined to a Zigbee network.
+func isJoined() -> String {
+    transport.post("__zigbee__/isJoined", "")
+}
+
+/// Check if a Zigbee device is currently online.
+func isOnline(deviceId: String) -> String {
+    transport.post("__zigbee__/isOnline", deviceId)
+}
+
+/// Check if join is currently permitted.
+func isPermittingJoin() -> String {
+    transport.post("__zigbee__/isPermittingJoin", "")
+}

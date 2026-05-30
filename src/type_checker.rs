@@ -7,6 +7,7 @@ pub struct TypeChecker {
     scopes: Vec<HashMap<String, Type>>,
     functions: HashMap<String, FunctionSignature>,
     errors: Vec<CompileError>,
+    in_async: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -23,6 +24,7 @@ pub enum Type {
     Function(Vec<Type>, Box<Type>),
     Tuple(Vec<Type>),
     Named(String, Vec<Type>),
+    Future(Box<Type>),
     Infer,
     Error,
 }
@@ -41,6 +43,7 @@ impl TypeChecker {
             scopes: vec![HashMap::new()],
             functions: HashMap::new(),
             errors: Vec::new(),
+            in_async: false,
         };
         tc.register_builtins();
         tc
@@ -395,6 +398,252 @@ impl TypeChecker {
                 );
             }
         }
+        // auth.* builtins (Session, JWT, Passkey, OAuth2, Authorization, Multi-tenant)
+        {
+            // Most auth functions take String params and return String (JSON-encoded)
+            let string_sigs: &[(&str, Vec<Type>)] = &[
+                ("__auth_jwtSign", vec![Type::String, Type::String]),
+                ("__auth_jwtVerify", vec![Type::String]),
+                ("__auth_jwtDecode", vec![Type::String]),
+                ("__auth_createSession", vec![Type::String, Type::String]),
+                ("__auth_getSession", vec![Type::String]),
+                ("__auth_hashPassword", vec![Type::String]),
+                ("__auth_verifyPassword", vec![Type::String, Type::String]),
+                ("__auth_checkPermission", vec![Type::String, Type::String]),
+                ("__auth_hasRole", vec![Type::String, Type::String]),
+                ("__auth_hasScope", vec![Type::String, Type::String]),
+                ("__auth_oauth2Authorize", vec![Type::String, Type::String, Type::String]),
+                ("__auth_oauth2Token", vec![Type::String, Type::String, Type::String]),
+                ("__auth_oauth2Refresh", vec![Type::String, Type::String]),
+                ("__auth_passkeyRegister", vec![Type::String, Type::String]),
+                ("__auth_passkeyAuthenticate", vec![Type::String]),
+                ("__auth_tenantContext", vec![Type::String]),
+                ("__auth_getTenant", vec![]),
+                ("__auth_listTenants", vec![]),
+                ("__auth_createTenant", vec![Type::String, Type::String]),
+                ("__auth_grantRole", vec![Type::String, Type::String]),
+                ("__auth_grantPermission", vec![Type::String, Type::String]),
+                ("__auth_revokeRole", vec![Type::String, Type::String]),
+                ("__auth_revokePermission", vec![Type::String, Type::String]),
+                ("__auth_generateApiKey", vec![Type::String]),
+                ("__auth_validateApiKey", vec![Type::String]),
+                ("__auth_checkAccess", vec![Type::String, Type::String, Type::String]),
+                ("__auth_setRoles", vec![Type::String, Type::String]),
+                ("__auth_setPermissions", vec![Type::String, Type::String]),
+            ];
+            for (name, param_types) in string_sigs {
+                self.functions.insert(
+                    name.to_string(),
+                    FunctionSignature {
+                        param_types: param_types.clone(),
+                        return_type: Box::new(Type::String),
+                        is_async: false,
+                    },
+                );
+            }
+            // destroySession: (String) → Nil
+            self.functions.insert(
+                "__auth_destroySession".to_string(),
+                FunctionSignature {
+                    param_types: vec![Type::String],
+                    return_type: Box::new(Type::Nil),
+                    is_async: false,
+                },
+            );
+        }
+        // worker.* builtins
+        {
+            let string_sigs: &[(&str, Vec<Type>)] = &[
+                ("__worker_create", vec![Type::String]),
+                ("__worker_send", vec![Type::String, Type::String]),
+                ("__worker_post", vec![Type::String, Type::String]),
+                ("__worker_receive", vec![Type::String]),
+                ("__worker_wait", vec![Type::String]),
+                ("__worker_terminate", vec![Type::String]),
+                ("__worker_isRunning", vec![Type::String]),
+                ("__worker_activeCount", vec![]),
+                ("__worker_terminateAll", vec![]),
+            ];
+            for (name, param_types) in string_sigs {
+                self.functions.insert(
+                    name.to_string(),
+                    FunctionSignature {
+                        param_types: param_types.clone(),
+                        return_type: Box::new(Type::String),
+                        is_async: false,
+                    },
+                );
+            }
+        }
+        // dict.* builtins (mutable key-value dictionary)
+        {
+            let string_sigs: &[(&str, Vec<Type>)] = &[
+                ("__dict_create", vec![]),
+                ("__dict_set", vec![Type::String, Type::String, Type::String]),
+                ("__dict_get", vec![Type::String, Type::String]),
+                ("__dict_has", vec![Type::String, Type::String]),
+                ("__dict_delete", vec![Type::String, Type::String]),
+                ("__dict_keys", vec![Type::String]),
+                ("__dict_length", vec![Type::String]),
+                ("__dict_clear", vec![Type::String]),
+            ];
+            for (name, param_types) in string_sigs {
+                self.functions.insert(
+                    name.to_string(),
+                    FunctionSignature {
+                        param_types: param_types.clone(),
+                        return_type: Box::new(Type::String),
+                        is_async: false,
+                    },
+                );
+            }
+        }
+        // json.* builtins (JSON parsing and serialization)
+        {
+            let string_sigs: &[(&str, Vec<Type>)] = &[
+                ("__json_parse", vec![Type::String]),
+                ("__json_parseInline", vec![Type::String]),
+                ("__json_get", vec![Type::String, Type::String]),
+                ("__json_stringify", vec![Type::String]),
+                ("__json_free", vec![Type::String]),
+                ("__json_buildMessage", vec![Type::String, Type::String]),
+            ];
+            for (name, param_types) in string_sigs {
+                self.functions.insert(
+                    name.to_string(),
+                    FunctionSignature {
+                        param_types: param_types.clone(),
+                        return_type: Box::new(Type::String),
+                        is_async: false,
+                    },
+                );
+            }
+            // __json_buildObject is varargs: pairs of (String, String)*
+            self.functions.insert(
+                "__json_buildObject".to_string(),
+                FunctionSignature {
+                    param_types: vec![
+                        Type::String, Type::String,
+                        Type::String, Type::String,
+                        Type::String, Type::String,
+                        Type::String, Type::String,
+                        Type::String, Type::String,
+                        Type::String, Type::String,
+                        Type::String, Type::String,
+                        Type::String, Type::String,
+                        Type::String, Type::String,
+                        Type::String, Type::String,
+                    ],
+                    return_type: Box::new(Type::String),
+                    is_async: false,
+                },
+            );
+            // __json_buildArray is varargs too
+            self.functions.insert(
+                "__json_buildArray".to_string(),
+                FunctionSignature {
+                    param_types: vec![Type::String, Type::String, Type::String, Type::String,
+                                      Type::String, Type::String, Type::String, Type::String],
+                    return_type: Box::new(Type::String),
+                    is_async: false,
+                },
+            );
+        }
+        // math.* builtins (extended math operations)
+        {
+            let unary_sigs: &[&str] = &[
+                "sqrt", "abs", "floor", "ceil", "round",
+                "sin", "cos", "tan", "log", "log2", "log10", "exp",
+            ];
+            for name in unary_sigs {
+                let fn_name = format!("__math_{}", name);
+                self.functions.insert(
+                    fn_name,
+                    FunctionSignature {
+                        param_types: vec![Type::Float],
+                        return_type: Box::new(Type::Float),
+                        is_async: false,
+                    },
+                );
+            }
+            let binary_sigs: &[&str] = &[
+                "pow", "max", "min",
+            ];
+            for name in binary_sigs {
+                let fn_name = format!("__math_{}", name);
+                self.functions.insert(
+                    fn_name,
+                    FunctionSignature {
+                        param_types: vec![Type::Float, Type::Float],
+                        return_type: Box::new(Type::Float),
+                        is_async: false,
+                    },
+                );
+            }
+            // Array/vector math: all take String (JSON array strings) and return String
+            let vec_sigs: &[(&str, Vec<Type>)] = &[
+                ("__math_sum", vec![Type::String]),
+                ("__math_mean", vec![Type::String]),
+                ("__math_dot", vec![Type::String, Type::String]),
+                ("__math_cosineSimilarity", vec![Type::String, Type::String]),
+                ("__math_euclidean", vec![Type::String, Type::String]),
+            ];
+            for (name, param_types) in vec_sigs {
+                self.functions.insert(
+                    name.to_string(),
+                    FunctionSignature {
+                        param_types: param_types.clone(),
+                        return_type: Box::new(Type::String),
+                        is_async: false,
+                    },
+                );
+            }
+        }
+        // env.* builtins (environment variables)
+        {
+            self.functions.insert(
+                "__env_get".to_string(),
+                FunctionSignature {
+                    param_types: vec![Type::String],
+                    return_type: Box::new(Type::String),
+                    is_async: false,
+                },
+            );
+            self.functions.insert(
+                "__env_set".to_string(),
+                FunctionSignature {
+                    param_types: vec![Type::String, Type::String],
+                    return_type: Box::new(Type::String),
+                    is_async: false,
+                },
+            );
+        }
+        // http.* builtins (HTTP client with custom headers)
+        self.functions.insert(
+            "__http_request".to_string(),
+            FunctionSignature {
+                param_types: vec![Type::String, Type::String, Type::String, Type::String],
+                return_type: Box::new(Type::String),
+                is_async: false,
+            },
+        );
+        self.functions.insert(
+            "__http_requestSync".to_string(),
+            FunctionSignature {
+                param_types: vec![Type::String, Type::String, Type::String, Type::String],
+                return_type: Box::new(Type::String),
+                is_async: false,
+            },
+        );
+        // __is_instanceof for runtime type checking (desugared from `is` operator)
+        self.functions.insert(
+            "__is_instanceof".to_string(),
+            FunctionSignature {
+                param_types: vec![Type::Infer, Type::String],
+                return_type: Box::new(Type::Bool),
+                is_async: false,
+            },
+        );
         self.functions.insert(
             "sum".into(),
             FunctionSignature {
@@ -466,6 +715,8 @@ impl TypeChecker {
         if f.stub_envs.is_some() {
             return Ok(());
         }
+        let prev_async = self.in_async;
+        self.in_async = f.is_async;
         self.scopes.push(HashMap::new());
         for param in &f.params {
             let ty = param
@@ -482,6 +733,7 @@ impl TypeChecker {
 
         let _ = self.check_block(&f.body);
         self.scopes.pop();
+        self.in_async = prev_async;
         Ok(())
     }
 
@@ -636,6 +888,13 @@ impl TypeChecker {
                 self.check_block(&boxed.value.body);
                 Type::Nil
             }
+            Stmt::Parallel(boxed) => {
+                for item in &boxed.value.items {
+                    self.check_stmt(&item.value);
+                }
+                Type::Nil
+            }
+            Stmt::Wait(_) => Type::Nil,
         }
     }
 
@@ -744,10 +1003,32 @@ impl TypeChecker {
                 let ty = self.check_expr(&inner.value);
                 if let Type::Result(ok, _) = ty { *ok } else { Type::Infer }
             }
+            Expr::Await(inner) => {
+                if !self.in_async {
+                    self.errors.push(crate::error::CompileError::new(
+                        "`await` used outside of async function".to_string(),
+                    ));
+                }
+                let ty = self.check_expr(&inner.value);
+                match ty {
+                    Type::Future(inner_ty) => *inner_ty,
+                    Type::Infer => Type::Infer,
+                    _ => {
+                        self.errors.push(crate::error::CompileError::new(
+                            format!("cannot `await` non-Future type {:?}", ty),
+                        ));
+                        Type::Error
+                    }
+                }
+            }
             Expr::MatchExpression { value, arms } => {
                 let _ = self.check_expr(&value.value);
                 for arm in arms { self.check_block(&arm.body); }
                 Type::Infer
+            }
+            Expr::Is { value, .. } => {
+                self.check_expr(&value.value);
+                Type::Bool
             }
         }
     }

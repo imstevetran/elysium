@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build & test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            llvm-install: |
+              sudo apt-get update && sudo apt-get install -y llvm-18-dev libclang-18-dev
+          - os: macos-latest
+            llvm-install: brew install llvm@18
+          - os: windows-latest
+            llvm-install: choco install llvm --version=18.1.0
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install LLVM 18
+        run: ${{ matrix.llvm-install }}
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Build workspace
+        run: cargo build --release --workspace
+
+      - name: Run tests
+        run: cargo test
+
+  validate-npm:
+    name: Validate npm package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Validate package structure
+        working-directory: npm-package
+        run: npm pack --dry-run

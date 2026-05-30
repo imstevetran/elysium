@@ -1,0 +1,152 @@
+{
+  "Function definition": {
+    "prefix": "func",
+    "body": "func ${1:name}($2) -> ${3:Int} {\n    $0\n}",
+    "description": "Define a function"
+  },
+  "Let variable": {
+    "prefix": "let",
+    "body": "let ${1:name} = ${2:value}",
+    "description": "Declare an immutable variable"
+  },
+  "Var variable": {
+    "prefix": "var",
+    "body": "var ${1:name} = ${2:value}",
+    "description": "Declare a mutable variable"
+  },
+  "If expression": {
+    "prefix": "if",
+    "body": "if ${1:condition} then {\n    $0\n}",
+    "description": "If-then expression"
+  },
+  "If-else expression": {
+    "prefix": "ife",
+    "body": "if ${1:condition} then {\n    $2\n} else {\n    $0\n}",
+    "description": "If-then-else expression"
+  },
+  "For loop": {
+    "prefix": "for",
+    "body": "for ${1:item} in ${2:collection} {\n    $0\n}",
+    "description": "For-in loop"
+  },
+  "While loop": {
+    "prefix": "while",
+    "body": "while ${1:condition} {\n    $0\n}",
+    "description": "While loop"
+  },
+  "Match expression": {
+    "prefix": "match",
+    "body": "match ${1:expr} {\n    ${2:pattern} => ${3:body}\n    $0\n}",
+    "description": "Match expression"
+  },
+  "Try-catch": {
+    "prefix": "try",
+    "body": "try {\n    $1\n} catch ${2:e} {\n    $0\n}",
+    "description": "Try-catch block"
+  },
+  "Class definition": {
+    "prefix": "class",
+    "body": "class ${1:Name} {\n    ${2:let field: ${3:String}}\n\n    init($4) {\n        $0\n    }\n}",
+    "description": "Define a class"
+  },
+  "Component definition": {
+    "prefix": "component",
+    "body": "component ${1:Name} {\n    state ${2:field} = ${3:default}\n\n    render {\n        <${4:View}>\n            $0\n        </${4:View}>\n    }\n}",
+    "description": "Define a UI component"
+  },
+  "Console log": {
+    "prefix": "print",
+    "body": "print($1)",
+    "description": "Print to console"
+  },
+  "Spec block": {
+    "prefix": "spec",
+    "body": "spec \"${1:suite}\" {\n    feat \"${2:test}\" {\n        expect ${3:expr}\n        $0\n    }\n}",
+    "description": "Spec-driven test block"
+  },
+  "Describe block": {
+    "prefix": "describe",
+    "body": "describe \"${1:suite}\" {\n    it \"${2:test}\" {\n        expect ${3:expr}\n        $0\n    }\n}",
+    "description": "Describe test block"
+  },
+  "Import statement": {
+    "prefix": "import",
+    "body": "import \"${1:./path.ely}\"${2: as ${3:alias}}",
+    "description": "Import a module"
+  },
+  "Async function": {
+    "prefix": "async",
+    "body": "async func ${1:name}($2) -> ${3:type} {\n    $0\n}",
+    "description": "Define an async function"
+  },
+  "Await expression": {
+    "prefix": "await",
+    "body": "await ${1:expr}",
+    "description": "Await an async expression"
+  },
+  "Parallel block": {
+    "prefix": "parallel",
+    "body": "parallel {\n    $0\n}",
+    "description": "Parallel execution block"
+  },
+  "Schedule block": {
+    "prefix": "schedule",
+    "body": "schedule ${1:interval} {\n    $0\n}",
+    "description": "Schedule a recurring task"
+  },
+  "Wait block": {
+    "prefix": "wait",
+    "body": "wait {\n    $0\n}",
+    "description": "Wait for async operations to complete"
+  },
+  "Worker block": {
+    "prefix": "worker",
+    "body": "worker ${1:name} {\n    $0\n}",
+    "description": "Define a web worker"
+  },
+  "Is operator": {
+    "prefix": "is",
+    "body": "${1:value} is ${2:TypeName}",
+    "description": "Runtime type check: value is TypeName"
+  },
+  "Enum definition": {
+    "prefix": "enum",
+    "body": "enum ${1:Name} {\n    ${2:Variant}\n    $0\n}",
+    "description": "Define an enum"
+  },
+  "Typealias": {
+    "prefix": "typealias",
+    "body": "typealias ${1:NewType} = ${2:ExistingType}",
+    "description": "Define a type alias"
+  },
+  "Benchmark block": {
+    "prefix": "bench",
+    "body": "bench {\n    $0\n}",
+    "description": "Benchmark block"
+  },
+  "Benchmark measurement": {
+    "prefix": "bm",
+    "body": "bm \"${1:name}\" {\n    $0\n}",
+    "description": "Individual benchmark measurement"
+  },
+  "Backtick string": {
+    "prefix": "bt",
+    "body": "`${0}`",
+    "description": "Multi-line backtick string literal"
+  },
+  "Stub function": {
+    "prefix": "stub",
+    "body": "stub func ${1:name}($2) -> ${3:Int}",
+    "description": "Define a stub function"
+  },
+  "Private declaration": {
+    "prefix": "private",
+    "body": "private ${1:func name($2) -> ${3:Int}}",
+    "description": "Mark a declaration as private"
+  },
+  "Lazy declaration": {
+    "prefix": "lazy",
+    "body": "lazy ${1:let name} = ${2:expr}",
+    "description": "Lazy-initialized declaration"
+  }
+}

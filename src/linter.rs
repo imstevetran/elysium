@@ -140,6 +140,7 @@ impl<'a> Linter<'a> {
                     self.check_block(&feat.body);
                 }
             }
+            Item::Worker(_) => {}
         }
     }
 
@@ -434,8 +435,14 @@ impl<'a> Linter<'a> {
                 self.check_expr(&boxed.value.expr.value, stmt.span.offset);
             }
             Stmt::Todo(_) | Stmt::Question(_) => {},
+            Stmt::Wait(_) => {},
             Stmt::Bench(boxed) => {
                 self.check_block(&boxed.value.body);
+            }
+            Stmt::Parallel(boxed) => {
+                for item in &boxed.value.items {
+                    self.check_stmt(item);
+                }
             }
         }
     }
@@ -502,11 +509,17 @@ impl<'a> Linter<'a> {
             Expr::ErrorPropagate(operand) => {
                 self.check_expr(&operand.value, parent_offset);
             }
+            Expr::Await(inner) => {
+                self.check_expr(&inner.value, parent_offset);
+            }
             Expr::MatchExpression { value, arms } => {
                 self.check_expr(&value.value, parent_offset);
                 for arm in arms {
                     self.check_block(&arm.body);
                 }
+            }
+            Expr::Is { value, .. } => {
+                self.check_expr(&value.value, parent_offset);
             }
             Expr::Literal(_) | Expr::Record(_) => {}
         }

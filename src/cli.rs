@@ -99,4 +99,54 @@ pub enum Commands {
         #[arg(short, long)]
         output: Option<PathBuf>,
     },
+    /// Run spec-driven tests (transform spec/feat/expect into runtime assertions)
+    Test {
+        /// Path to a .ely file or a directory containing .ely test files (default: tests/)
+        path: Option<PathBuf>,
+        /// Run tests without executing (just type-check and show spec structure)
+        #[arg(long)]
+        dry_run: bool,
+        /// Target environment for stub resolution (default: test)
+        #[arg(long, default_value = "test")]
+        env: String,
+    },
+    /// Update package dependencies to latest compatible versions
+    Update {
+        /// Target package (omit to check all dependencies)
+        package: Option<String>,
+        /// Apply updates to elysium.json (default: dry-run / list only)
+        #[arg(short, long)]
+        apply: bool,
+        /// Update to latest version (ignores constraint range)
+        #[arg(long)]
+        latest: bool,
+        /// Force downgrade if latest is lower than current
+        #[arg(long)]
+        force: bool,
+    },
+    /// Migrate Elysium source files — automatically update syntax to the latest dialect
+    Migrate {
+        /// Path to a .ely source file or directory (default: recursive scan)
+        file: Option<PathBuf>,
+        /// Skip files that are already up-to-date
+        #[arg(long)]
+        check: bool,
+        /// Only show what would change, don't write anything
+        #[arg(long)]
+        dry_run: bool,
+        /// Force migration even for patterns marked as "requires manual review"
+        #[arg(long)]
+        force: bool,
+    },
+    /// Port a TypeScript or JavaScript file to Elysium
+    Port {
+        /// Path to the .ts or .js source file
+        file: PathBuf,
+        /// Output file (default: stdout)
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+        /// Language override (typescript, javascript) — auto-detected from extension by default
+        #[arg(long)]
+        lang: Option<String>,
+    },
 }

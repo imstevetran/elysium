@@ -29,6 +29,7 @@ pub enum Item {
     TypeAlias(TypeAlias),
     Import(String, Option<String>),
     Spec(Spec),
+    Worker(WorkerDef),
 }
 
 #[derive(Debug, Clone)]
@@ -40,6 +41,7 @@ pub struct Function {
     pub is_async: bool,
     pub is_private: bool,
     pub is_lazy: bool,
+    pub schedule_expr: Option<String>,
     pub doc_comment: Option<String>,
     pub bc_reason: Option<String>,
     pub stub_envs: Option<Vec<String>>,
@@ -107,6 +109,15 @@ pub struct TypeAlias {
     pub type_expr: TypeExpr,
 }
 
+/// A worker definition — a portable thread/worker construct.
+#[derive(Debug, Clone)]
+pub struct WorkerDef {
+    pub name: String,
+    pub params: Vec<Param>,
+    pub body: Block,
+    pub doc_comment: Option<String>,
+}
+
 /// A block of statements.
 #[derive(Debug, Clone)]
 pub struct Block {
@@ -132,6 +143,13 @@ pub enum Stmt {
     Todo(Box<Node<Todo>>),
     Question(Box<Node<Question>>),
     Bench(Box<Node<Bench>>),
+    Parallel(Box<Node<ParallelBlock>>),
+    Wait(Box<Node<Wait>>),
+}
+
+#[derive(Debug, Clone)]
+pub struct ParallelBlock {
+    pub items: Vec<Node<Stmt>>,
 }
 
 #[derive(Debug, Clone)]
@@ -260,6 +278,12 @@ pub struct Question {
     pub message: Option<String>,
 }
 
+/// A wait statement: `wait <milliseconds>`
+#[derive(Debug, Clone)]
+pub struct Wait {
+    pub millis: u64,
+}
+
 /// An expression.
 #[derive(Debug, Clone)]
 pub enum Expr {
@@ -315,9 +339,14 @@ pub enum Expr {
         reason: String,
     },
     ErrorPropagate(Box<Node<Expr>>),
+    Await(Box<Node<Expr>>),
     MatchExpression {
         value: Box<Node<Expr>>,
         arms: Vec<MatchArm>,
+    },
+    Is {
+        value: Box<Node<Expr>>,
+        type_name: String,
     },
 }
 

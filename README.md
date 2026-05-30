@@ -8,6 +8,22 @@ The language is designed to minimize micromanagement while giving you full contr
 
 ---
 
+## 🌐 Documentation Site
+
+The full documentation site is available at **[elysium-lang.dev](https://imstevetran.github.io/elysium)** (or your custom domain).
+
+The site includes:
+- **Language Guide** — complete syntax reference
+- **UI Guide** — declarative component-based UI layer
+- **Standard Library** — console, fs, transport, string, regex, datetime
+- **Spec-Driven Development** — inline tests with spec/feat/expect
+- **Tooling** — CLI, EPM package manager, npm package, linter
+- **Recipes** — 16 practical code examples from beginner to advanced
+
+The site source lives in [`docs/`](docs/).
+
+---
+
 ## Philosophy
 
 | Principle | Description |
@@ -41,19 +57,13 @@ print(message)
 | `bc` / `because` | Inline explanation and assertions |
 | `only` | Guards, exclusive matches, and ownership |
 | `…` (ellipsis) | Ranges, rest parameters, and spread |
-| `match` | Pattern matching with algebraic data types |
+| `match` / `switch` | Pattern matching with algebraic data types |
 | `Result<T, E>` | Type-safe error handling with `?` propagation |
 | `async` / `await` | Lightweight concurrency with channels |
+| `parallel` blocks | Thread-based parallelism |
 | `component` | Declarative, reactive UI components |
-
----
-
-## Documentation
-
-| File | Description |
-|------|-------------|
-| [`docs/SYNTAX.md`](docs/SYNTAX.md) | Complete syntax reference for the language |
-| [`docs/UI.md`](docs/UI.md) | Declarative UI layer — components, state, events |
+| `spec` / `feat` / `expect` | Inline spec-driven development |
+| `bench` / `bm` | Built-in benchmarking |
 
 ---
 
@@ -96,6 +106,60 @@ component TodoApp {
 
 ---
 
+## Installation
+
+```bash
+npm install -g elysium-lang
+```
+
+Then compile and run:
+
+```bash
+ely run hello.ely
+```
+
+---
+
+## Documentation
+
+| File | Description |
+|------|-------------|
+| [`docs/`](docs/) | GitHub Pages documentation site source |
+| [`docs/SYNTAX.md`](docs/SYNTAX.md) | Complete syntax reference for the language |
+| [`docs/UI.md`](docs/UI.md) | Declarative UI layer — components, state, events |
+| [`AGENT_GUIDELINES.md`](AGENT_GUIDELINES.md) | Development log and design decisions |
+
+---
+
+## Project Structure
+
+```
+.
+├── docs/                          # Documentation site (GitHub Pages)
+│   ├── index.html                 # Home page
+│   ├── 404.html                   # 404 page
+│   ├── assets/css/style.css       # Shared styles
+│   ├── assets/js/main.js          # Shared scripts
+│   ├── guide/index.html           # Language guide
+│   ├── ui/index.html              # UI framework guide
+│   ├── std/index.html             # Standard library reference
+│   ├── spec/index.html            # Spec-driven development
+│   ├── tooling/index.html         # CLI, EPM, npm, linter
+│   ├── SYNTAX.md                  # Complete syntax reference
+│   ├── UI.md                      # Declarative UI layer docs
+│   └── recipes/                   # 16 practical code recipes
+├── src/                           # Compiler source (14 .rs files)
+├── elysium-rt/                    # Rust runtime library
+├── epm/                           # Elysium Package Manager
+├── npm-package/                   # npm distribution
+├── examples/                      # 23 example .ely/.elyx files
+├── Cargo.toml                     # Rust workspace definition
+├── AGENT_GUIDELINES.md            # Development log
+└── README.md                      # This file
+```
+
+---
+
 ## Status
 
-Elysium 2.0 is currently a **language specification and design document**. There is no compiler or runtime implementation yet. This repository captures the syntax, type system, memory model, concurrency model, and UI layer as a reference for future implementation.
+Elysium 2.0 has a **working Rust compiler** with an LLVM backend (via `inkwell`), a complete JavaScript runtime, a package manager (EPM), and a declarative UI framework. The compiler compiles `.ely` and `.elyx` files to native binaries.

@@ -1,0 +1,175 @@
+/// Summary: Demonstrate the auth package — JWT, sessions, passwords, OAuth2, passkey, authorization, and multi-tenant support.
+/// Note: This example requires Node.js runtime for the JS backend.
+
+// ─── JWT ──────────────────────────────────────────────────────────────────────
+
+/// Summary: Sign a JWT token with a payload and expiration.
+let token = auth.jwtSign('{"sub": "user123", "name": "Alice"}', "1h")
+print("JWT Token:")
+print(token)
+
+/// Summary: Verify a JWT token and decode its payload.
+let verified = auth.jwtVerify(token)
+print("Verified:")
+print(verified)
+
+/// Summary: Decode a JWT token without verification.
+let decoded = auth.jwtDecode(token)
+print("Decoded (no verify):")
+print(decoded)
+
+/// Summary: Check if a JWT token contains a specific scope.
+let scopeCheck = auth.hasScope(token, "read")
+print("Has scope 'read':")
+print(scopeCheck)
+
+// ─── Session Management ───────────────────────────────────────────────────────
+
+/// Summary: Create a new session for a user with associated data.
+let session = auth.createSession("user123", '{"role": "admin", "prefs": {"theme": "dark"}}')
+print("Created Session:")
+print(session)
+
+/// Summary: Retrieve session data by session ID (parse JSON to find sessionId).
+let sessionId = "test_session_id_placeholder"
+bc false, "In real usage, parse session JSON for sessionId"
+let sessionData = auth.getSession("some_session_id")
+print("Session Lookup:")
+print(sessionData)
+
+/// Summary: Destroy a session by ID (void return).
+auth.destroySession("some_session_id")
+print("Session destroyed")
+
+// ─── Password Hashing & Verification ──────────────────────────────────────────
+
+/// Summary: Hash a password with PBKDF2-SHA256 (salted).
+let hashed = auth.hashPassword("my-secure-password")
+print("Password Hash:")
+print(hashed)
+
+/// Summary: Verify a password against a hash.
+let match = auth.verifyPassword("my-secure-password", hashed)
+print("Password Match:")
+print(match)
+
+let noMatch = auth.verifyPassword("wrong-password", hashed)
+print("Password Mismatch:")
+print(noMatch)
+
+// ─── Authorization ────────────────────────────────────────────────────────────
+
+/// Summary: Check if a user has a specific permission.
+let hasPerm = auth.checkPermission("user123", "delete:documents")
+print("Has permission 'delete:documents':")
+print(hasPerm)
+
+/// Summary: Check if a user has a specific role.
+let roleCheck = auth.hasRole("user123", "admin")
+print("Has role 'admin':")
+print(roleCheck)
+
+// ─── RBAC Access Control ──────────────────────────────────────────────────────
+
+/// Summary: Set roles for a user (JSON array of role names).
+let setRoles = auth.setRoles("user123", '["admin", "editor", "viewer"]')
+print("Set Roles:")
+print(setRoles)
+
+/// Summary: Set permissions for a user (JSON array of permission strings).
+let setPerms = auth.setPermissions("user123", '["documents:read", "documents:write", "users:read"]')
+print("Set Permissions:")
+print(setPerms)
+
+/// Summary: Check if a user has access to a resource with a specific action.
+let access = auth.checkAccess("user123", "documents", "write")
+print("Access Check (documents:write):")
+print(access)
+
+let denied = auth.checkAccess("user123", "admin-panel", "delete")
+print("Access Check (admin-panel:delete) — likely denied:")
+print(denied)
+
+// ─── OAuth2 ───────────────────────────────────────────────────────────────────
+
+/// Summary: Generate an OAuth2 authorization URL.
+let authUrl = auth.oauth2Authorize("my-app", "http://localhost:3000/callback", "openid profile email")
+print("OAuth2 Authorization URL:")
+print(authUrl)
+
+/// Summary: Exchange an authorization code for tokens.
+let tokens = auth.oauth2Token("auth_code_placeholder", "my-app", "client_secret_here")
+print("OAuth2 Token Exchange:")
+print(tokens)
+
+/// Summary: Refresh an access token using a refresh token.
+let refreshed = auth.oauth2Refresh("refresh_token_placeholder", "my-app")
+print("OAuth2 Refresh:")
+print(refreshed)
+
+// ─── Passkey (WebAuthn) ───────────────────────────────────────────────────────
+
+/// Summary: Generate passkey registration options for a user.
+let regOpts = auth.passkeyRegister("user123", "Alice")
+print("Passkey Registration Options:")
+print(regOpts)
+
+/// Summary: Generate passkey authentication options for a user.
+let authOpts = auth.passkeyAuthenticate("user123")
+print("Passkey Authentication Options:")
+print(authOpts)
+
+// ─── API Key Auth ─────────────────────────────────────────────────────────────
+
+/// Summary: Generate a new API key for a user.
+let apiKeyResult = auth.generateApiKey("user123")
+print("Generated API Key:")
+print(apiKeyResult)
+
+/// Summary: Validate an API key (using the raw key from generateApiKey).
+/// In real usage, parse the generated key and validate it.
+let validResult = auth.validateApiKey("ely_test_key_placeholder")
+print("API Key Validation:")
+print(validResult)
+
+// ─── Multi-tenant ─────────────────────────────────────────────────────────────
+
+/// Summary: Create a new tenant with a configuration.
+let newTenant = auth.createTenant("acme-corp", '{"plan": "enterprise", "seats": 100}')
+print("Created Tenant:")
+print(newTenant)
+
+/// Summary: Set and retrieve tenant context. Creates tenant if not exists.
+let ctx = auth.tenantContext("acme-corp")
+print("Tenant Context:")
+print(ctx)
+
+/// Summary: Get the current default tenant ID.
+let currentTenant = auth.getTenant()
+print("Current Tenant:")
+print(currentTenant)
+
+/// Summary: List all registered tenants.
+let allTenants = auth.listTenants()
+print("All Tenants:")
+print(allTenants)
+
+// ─── Role & Permission Management ─────────────────────────────────────────────
+
+/// Summary: Grant a role to a user.
+auth.grantRole("newuser", "editor")
+print("Granted role 'editor' to newuser")
+
+/// Summary: Grant a permission to a user.
+auth.grantPermission("newuser", "reports:read")
+print("Granted permission 'reports:read' to newuser")
+
+/// Summary: Revoke a role from a user.
+auth.revokeRole("newuser", "editor")
+print("Revoked role 'editor' from newuser")
+
+/// Summary: Revoke a permission from a user.
+auth.revokePermission("newuser", "reports:read")
+print("Revoked permission 'reports:read' from newuser")
+
+print("--- All auth operations completed ---")

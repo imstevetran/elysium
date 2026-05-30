@@ -1,0 +1,32 @@
+// BLE (Bluetooth Low Energy) example
+// Demonstrates scanning, connecting, and reading/writing characteristics.
+//
+// Usage: ely check examples/ble.ely
+
+import "#/ble" as ble
+
+func main() {
+    // Scan for nearby BLE devices
+    ble.scan()
+
+    // Connect to a device by address
+    let deviceId = ble.connect("AA:BB:CC:DD:EE:FF")
+
+    // Read device name
+    let name = ble.deviceName(deviceId)
+    print("Device: " + name)
+
+    // Read a characteristic (service UUID, characteristic UUID)
+    let value = ble.readCharacteristic(deviceId, "180D", "2A37")
+    print("Heart Rate: " + value)
+
+    // Write to a characteristic
+    ble.writeCharacteristic(deviceId, "180D", "2A39", "01")
+
+    // Read RSSI (signal strength)
+    let rssi = ble.readRssi(deviceId)
+    print("RSSI: " + rssi + " dBm")
+
+    // Disconnect
+    ble.disconnect(deviceId)
+}

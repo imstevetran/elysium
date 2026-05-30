@@ -1,0 +1,43 @@
+/// Summary: Demonstrate portable worker API in Elysium (updated from webworker.*)
+/// Parameters: None
+/// Returns: String result from worker operations
+///
+/// Note: The old webworker.* built-in has been replaced by the unified worker.* API.
+/// This portable API works identically across Web (Web Workers) and Native (pthreads)
+/// backends.
+
+func main() -> String {
+    // Create a worker with inline script code
+    let workerId = webworker.create("echo worker")
+    print("Worker created: " + workerId)
+
+    // Check it's running
+    let running = webworker.isRunning(workerId)
+    print("Is running: " + running)
+
+    // Fire-and-forget message (non-blocking)
+    let postResult = webworker.post(workerId, "Hello from Elysium")
+    print("Posted: " + postResult)
+
+    // Read next message from queue (non-blocking)
+    let reply = webworker.receive(workerId)
+    print("Reply: " + reply)
+
+    // Blocking send+reply
+    let echoResult = webworker.send(workerId, "ping")
+    print("Echo result: " + echoResult)
+
+    // Get active worker count
+    let count = webworker.activeCount()
+    print("Active workers: " + count)
+
+    // Terminate the worker
+    webworker.terminate(workerId)
+    print("Worker terminated")
+
+    // Terminate all remaining workers
+    webworker.terminateAll()
+    print("All workers terminated")
+
+    return "ok"
+}

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Switch / Case Branching — Elysium Recipes</title>
+  <meta name="description" content="Human-friendly conditional branching with switch/case/then/else in Elysium." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../assets/css/style.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>⚡</text></svg>" />
+</head>
+<body>
+  <header class="navbar">
+    <a href="../" class="logo"><svg viewBox="0 0 28 28" fill="none"><rect x="2" y="2" width="24" height="24" rx="6" stroke="%236c63ff" stroke-width="2" /><text x="14" y="20" text-anchor="middle" font-size="16" font-weight="bold" fill="%236c63ff">E</text></svg><span>Elysium</span></a>
+    <button class="menu-toggle" aria-label="Toggle menu"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
+    <nav>
+      <a href="../guide/">Guide</a>
+      <a href="../ui/">UI</a>
+      <a href="../std/">Std Lib</a>
+      <a href="../spec/">Spec</a>
+      <a href="../tooling/">Tooling</a>
+      <a href="../recipes/" class="active">Recipes</a>
+    </nav>
+  </header>
+  <main class="main">
+    <div class="breadcrumbs"><a href="../">Home</a> / <a href="./">Recipes</a> / <span>Switch / Case</span></div>
+    <div class="page-header">
+      <h1>Switch / Case Branching</h1>
+      <p>Human-friendly branching with <code>switch</code>/<code>case</code>/<code>then</code>/<code>else</code>. <span class="tag diff-beginner">Beginner</span></p>
+    </div>
+    <section class="content-section animate-on-scroll">
+      <h2>Switch as Expression</h2>
+<div class="code-header"><span>switch_expression.ely</span></div>
+<pre><code><span class="hl-kw">func</span> <span class="hl-fn">describe_score</span>(score: <span class="hl-type">Int</span>) <span class="hl-op">-&gt;</span> <span class="hl-type">String</span> {
+    <span class="hl-kw">return</span> <span class="hl-kw">switch</span> score {
+        <span class="hl-kw">case</span> <span class="hl-num">100</span> <span class="hl-kw">then</span> { <span class="hl-str">"Perfect!"</span> }
+        <span class="hl-kw">case</span> <span class="hl-num">90</span> <span class="hl-kw">then</span> { <span class="hl-str">"Excellent!"</span> }
+        <span class="hl-kw">case</span> <span class="hl-num">80</span> <span class="hl-kw">then</span> { <span class="hl-str">"Great!"</span> }
+        <span class="hl-kw">case</span> <span class="hl-num">70</span> <span class="hl-kw">then</span> { <span class="hl-str">"Good"</span> }
+        <span class="hl-kw">case</span> <span class="hl-num">60</span> <span class="hl-kw">then</span> { <span class="hl-str">"Passing"</span> }
+        <span class="hl-kw">else</span> { <span class="hl-str">"Needs improvement"</span> }
+    }
+}
+
+<span class="hl-kw">let</span> s1 = describe_score(<span class="hl-num">100</span>)   <span class="hl-comment">// "Perfect!"</span></code></pre>
+    </section>
+    <section class="content-section animate-on-scroll">
+      <h2>Switch as Statement</h2>
+<pre><code><span class="hl-kw">let</span> x = <span class="hl-num">3</span>
+<span class="hl-kw">switch</span> x {
+    <span class="hl-kw">case</span> <span class="hl-num">1</span> <span class="hl-kw">then</span> { print(<span class="hl-str">"one\n"</span>) }
+    <span class="hl-kw">case</span> <span class="hl-num">2</span> <span class="hl-kw">then</span> { print(<span class="hl-str">"two\n"</span>) }
+    <span class="hl-kw">case</span> <span class="hl-num">3</span> <span class="hl-kw">then</span> { print(<span class="hl-str">"three\n"</span>) }
+    <span class="hl-kw">else</span> { print(<span class="hl-str">"many\n"</span>) }
+}</code></pre>
+    </section>
+    <section class="content-section animate-on-scroll">
+      <h2>Wildcard Pattern</h2>
+<pre><code><span class="hl-kw">let</span> y = <span class="hl-num">42</span>
+<span class="hl-kw">switch</span> y {
+    <span class="hl-kw">case</span> <span class="hl-num">0</span> <span class="hl-kw">then</span> { print(<span class="hl-str">"zero\n"</span>) }
+    <span class="hl-kw">case</span> _ <span class="hl-kw">then</span> { print(<span class="hl-str">"non-zero\n"</span>) }
+}</code></pre>
+    </section>
+    <section class="content-section animate-on-scroll">
+      <h2>String Patterns</h2>
+<pre><code><span class="hl-kw">let</span> name = <span class="hl-str">"bob"</span>
+<span class="hl-kw">switch</span> name {
+    <span class="hl-kw">case</span> <span class="hl-str">"alice"</span> <span class="hl-kw">then</span> { print(<span class="hl-str">"hi alice\n"</span>) }
+    <span class="hl-kw">case</span> <span class="hl-str">"bob"</span> <span class="hl-kw">then</span> { print(<span class="hl-str">"hi bob\n"</span>) }
+    <span class="hl-kw">else</span> { print(<span class="hl-str">"hi stranger\n"</span>) }
+}</code></pre>
+    </section>
+    <section class="content-section animate-on-scroll">
+      <h2>How It Works</h2>
+      <p><code>switch</code>/<code>case</code>/<code>then</code>/<code>else</code> desugars directly into <code>match</code>/<code>case</code> AST nodes at compile time. The entire pipeline (HIR, MIR, codegen) sees them as standard pattern matching — no special handling needed. <code>else</code> becomes a <code>Wildcard</code> pattern arm.</p>
+    </section>
+  </main>
+  <footer class="footer"><p>Elysium 2.0 &middot; <a href="https://github.com/imstevetran/elysium">GitHub</a></p></footer>
+  <script src="../assets/js/main.js"></script>
+</body>
+</html>

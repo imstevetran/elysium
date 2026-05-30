@@ -6,7 +6,19 @@ use crate::hir::*;
 #[derive(Debug, Clone)]
 pub struct MirProgram {
     pub functions: Vec<MirFunction>,
+    pub workers: Vec<MirWorker>,
     pub compile_unit_line: u32,
+}
+
+/// A MIR worker definition — lowered from HirWorker.
+/// The worker construct represents a portable thread/worker that
+/// can be spawned and communicated with via message passing.
+#[derive(Debug, Clone)]
+pub struct MirWorker {
+    pub name: String,
+    pub params: Vec<MirParam>,
+    pub body: MirBlock,
+    pub dbg_line: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -16,6 +28,7 @@ pub struct MirFunction {
     pub return_type: MirType,
     pub body: MirBlock,
     pub is_async: bool,
+    pub schedule_expr: Option<String>,
     pub dbg_line: u32,
 }
 
@@ -69,6 +82,20 @@ pub enum MirStmt {
         body_stmts: Vec<MirStmt>,
         dbg_line: u32,
     },
+    Parallel {
+        blocks: Vec<Vec<MirStmt>>,
+        dbg_line: u32,
+    },
+    /// Wait for N milliseconds (via usleep).
+    Wait(u64, u32),
+    /// Async await point — state machine will save/restore at this point.
+    /// The `value` is the awaited expression (e.g. a transport call).
+    /// `result_target` is the variable name to store the result into.
+    Await {
+        value: Vec<MirStmt>,
+        result_target: Option<String>,
+        dbg_line: u32,
+    },
     ConsoleCall {
         method: String,
         args: Vec<MirValue>,
@@ -107,6 +134,73 @@ pub enum MirStmt {
         result: Option<String>,
         method: String,
         args: Vec<MirValue>,
+        dbg_line: u32,
+    },
+    LangChainCall {
+        result: Option<String>,
+        method: String,
+        args: Vec<MirValue>,
+        dbg_line: u32,
+    },
+    LangGraphCall {
+        result: Option<String>,
+        method: String,
+        args: Vec<MirValue>,
+        dbg_line: u32,
+    },
+    AuthCall {
+        result: Option<String>,
+        method: String,
+        args: Vec<MirValue>,
+        dbg_line: u32,
+    },
+    /// Worker call. When `result` is Some(name), the return value is stored into that alloca.
+    WorkerCall {
+        result: Option<String>,
+        method: String,
+        args: Vec<MirValue>,
+        dbg_line: u32,
+    },
+    /// Dict call (mutable key-value dictionary).
+    DictCall {
+        result: Option<String>,
+        method: String,
+        args: Vec<MirValue>,
+        dbg_line: u32,
+    },
+    /// JSON call (parsing and serialization).
+    JsonCall {
+        result: Option<String>,
+        method: String,
+        args: Vec<MirValue>,
+        dbg_line: u32,
+    },
+    /// Math call (extended math operations).
+    MathCall {
+        result: Option<String>,
+        method: String,
+        args: Vec<MirValue>,
+        dbg_line: u32,
+    },
+    /// Env call (environment variable access).
+    EnvCall {
+        result: Option<String>,
+        method: String,
+        args: Vec<MirValue>,
+        dbg_line: u32,
+    },
+    /// Http call (HTTP client with custom headers).
+    HttpCall {
+        result: Option<String>,
+        method: String,
+        args: Vec<MirValue>,
+        dbg_line: u32,
+    },
+    /// Is call (runtime type checking — `instanceof`).
+    IsCall {
+        result: Option<String>,
+        value: MirValue,
+        type_name: MirValue,
         dbg_line: u32,
     },
 }
@@ -166,12 +260,14 @@ impl MirLowerer {
 
     fn lower_program(&mut self, program: &HirProgram, first_line: u32) -> MirProgram {
         let mut functions = Vec::new();
+        let mut workers = Vec::new();
         for item in &program.items {
             match item {
                 HirItem::Function(f) => functions.push(self.lower_function(f)),
+                HirItem::Worker(w) => workers.push(self.lower_worker(w)),
             }
         }
-        MirProgram { functions, compile_unit_line: first_line }
+        MirProgram { functions, workers, compile_unit_line: first_line }
     }
 
     fn lower_function(&mut self, f: &HirFunction) -> MirFunction {
@@ -185,15 +281,51 @@ impl MirLowerer {
             })
             .collect();
 
-        let body = self.lower_block(&f.body);
+        let mut body = self.lower_block(&f.body);
+
+        // Implicit return: if the last statement in a non-void function is a bare
+        // expression (Call __expr__), convert it into an explicit Return.
+        let ret_type = self.lower_type(&f.return_type);
+        if ret_type != MirType::Nil {
+            let has_implicit_return = body.stmts.last().map_or(false, |last| {
+                matches!(last, MirStmt::Call { result: None, callee, .. } if callee == "__expr__")
+            });
+            if has_implicit_return {
+                if let MirStmt::Call { args, dbg_line, .. } = body.stmts.pop().unwrap() {
+                    if let Some(val) = args.into_iter().next() {
+                        body.stmts.push(MirStmt::Return(Some(val), dbg_line));
+                    }
+                }
+            }
+        }
 
         MirFunction {
             name: f.name.clone(),
             params,
-            return_type: self.lower_type(&f.return_type),
+            return_type: ret_type,
             body,
             is_async: f.is_async,
+            schedule_expr: f.schedule_expr.clone(),
             dbg_line: f.line,
+        }
+    }
+
+    fn lower_worker(&mut self, w: &HirWorker) -> MirWorker {
+        let params = w
+            .params
+            .iter()
+            .map(|p| MirParam {
+                name: p.name.clone(),
+                ty: self.lower_type(&p.ty),
+                dbg_line: w.line,
+            })
+            .collect();
+        let body = self.lower_block(&w.body);
+        MirWorker {
+            name: w.name.clone(),
+            params,
+            body,
+            dbg_line: w.line,
         }
     }
 
@@ -231,6 +363,8 @@ impl MirLowerer {
             HirStmt::While { line, .. } => *line,
             HirStmt::Match { line, .. } => *line,
             HirStmt::Bench(_, line) => *line,
+            HirStmt::Wait(_, line) => *line,
+            HirStmt::Parallel { line, .. } => *line,
         }
     }
 
@@ -314,6 +448,117 @@ impl MirLowerer {
                                     });
                                     return;
                                 }
+                                if cname.starts_with("__auth_") {
+                                    let method = cname.strip_prefix("__auth_").unwrap_or(cname).to_string();
+                                    let mir_args: Vec<MirValue> = args.iter().map(|a| self.lower_expr(a)).collect();
+                                    stmts.push(MirStmt::AuthCall {
+                                        result: Some(name.clone()),
+                                        method,
+                                        args: mir_args,
+                                        dbg_line: line,
+                                    });
+                                    return;
+                                }
+                                if cname.starts_with("__worker_") {
+                                    let method = cname.strip_prefix("__worker_").unwrap_or(cname).to_string();
+                                    let mir_args: Vec<MirValue> = args.iter().map(|a| self.lower_expr(a)).collect();
+                                    stmts.push(MirStmt::WorkerCall {
+                                        result: Some(name.clone()),
+                                        method,
+                                        args: mir_args,
+                                        dbg_line: line,
+                                    });
+                                    return;
+                                }
+                                if cname.starts_with("__langchain_") {
+                                    let method = cname.strip_prefix("__langchain_").unwrap_or(cname).to_string();
+                                    let mir_args: Vec<MirValue> = args.iter().map(|a| self.lower_expr(a)).collect();
+                                    stmts.push(MirStmt::LangChainCall {
+                                        result: Some(name.clone()),
+                                        method,
+                                        args: mir_args,
+                                        dbg_line: line,
+                                    });
+                                    return;
+                                }
+                                if cname.starts_with("__langgraph_") {
+                                    let method = cname.strip_prefix("__langgraph_").unwrap_or(cname).to_string();
+                                    let mir_args: Vec<MirValue> = args.iter().map(|a| self.lower_expr(a)).collect();
+                                    stmts.push(MirStmt::LangGraphCall {
+                                        result: Some(name.clone()),
+                                        method,
+                                        args: mir_args,
+                                        dbg_line: line,
+                                    });
+                                    return;
+                                }
+                                if cname.starts_with("__dict_") {
+                                    let method = cname.strip_prefix("__dict_").unwrap_or(cname).to_string();
+                                    let mir_args: Vec<MirValue> = args.iter().map(|a| self.lower_expr(a)).collect();
+                                    stmts.push(MirStmt::DictCall {
+                                        result: Some(name.clone()),
+                                        method,
+                                        args: mir_args,
+                                        dbg_line: line,
+                                    });
+                                    return;
+                                }
+                                if cname.starts_with("__json_") {
+                                    let method = cname.strip_prefix("__json_").unwrap_or(cname).to_string();
+                                    let mir_args: Vec<MirValue> = args.iter().map(|a| self.lower_expr(a)).collect();
+                                    stmts.push(MirStmt::JsonCall {
+                                        result: Some(name.clone()),
+                                        method,
+                                        args: mir_args,
+                                        dbg_line: line,
+                                    });
+                                    return;
+                                }
+                                if cname == "__is_instanceof" {
+                                    let mir_args: Vec<MirValue> = args.iter().map(|a| self.lower_expr(a)).collect();
+                                    let val = mir_args.first().cloned().unwrap_or(MirValue::Nil);
+                                    let tn = mir_args.get(1).cloned().unwrap_or(MirValue::Nil);
+                                    stmts.push(MirStmt::IsCall {
+                                        result: Some(name.clone()),
+                                        value: val,
+                                        type_name: tn,
+                                        dbg_line: line,
+                                    });
+                                    return;
+                                }
+                                if cname.starts_with("__math_") {
+                                    let method = cname.strip_prefix("__math_").unwrap_or(cname).to_string();
+                                    let mir_args: Vec<MirValue> = args.iter().map(|a| self.lower_expr(a)).collect();
+                                    stmts.push(MirStmt::MathCall {
+                                        result: Some(name.clone()),
+                                        method,
+                                        args: mir_args,
+                                        dbg_line: line,
+                                    });
+                                    return;
+                                }
+                                if cname.starts_with("__env_") {
+                                    let method = cname.strip_prefix("__env_").unwrap_or(cname).to_string();
+                                    let mir_args: Vec<MirValue> = args.iter().map(|a| self.lower_expr(a)).collect();
+                                    stmts.push(MirStmt::EnvCall {
+                                        result: Some(name.clone()),
+                                        method,
+                                        args: mir_args,
+                                        dbg_line: line,
+                                    });
+                                    return;
+                                }
+                                if cname.starts_with("__http_") {
+                                    let method = cname.strip_prefix("__http_").unwrap_or(cname).to_string();
+                                    let mir_args: Vec<MirValue> = args.iter().map(|a| self.lower_expr(a)).collect();
+                                    stmts.push(MirStmt::HttpCall {
+                                        result: Some(name.clone()),
+                                        method,
+                                        args: mir_args,
+                                        dbg_line: line,
+                                    });
+                                    return;
+                                }
                             }
                         }
                         stmts.push(MirStmt::Store {
@@ -334,6 +579,19 @@ impl MirLowerer {
                 }
             }
             HirStmt::Expr(expr, _) => {
+                // Check for await expression first
+                if let HirExpr::Await(inner) = expr {
+                    // Emit the awaited expression as statements, then store result
+                    let mut await_stmts = Vec::new();
+                    // Lower the inner expression as a Mir value
+                    let mir_val = self.lower_expr(inner);
+                    stmts.push(MirStmt::Await {
+                        value: await_stmts,
+                        result_target: None,
+                        dbg_line: line,
+                    });
+                    return;
+                }
                 // Check if this is a console call expression
                 if let HirExpr::Call { callee, args } = expr {
                     if let HirExpr::Ident(name) = callee.as_ref() {
@@ -398,6 +656,117 @@ impl MirLowerer {
                                 result: None,
                                 method,
                                 args: mir_args,
+                                dbg_line: line,
+                            });
+                            return;
+                        }
+                        if name.starts_with("__auth_") {
+                            let method = name.strip_prefix("__auth_").unwrap_or(name).to_string();
+                            let mir_args: Vec<MirValue> = args.iter().map(|a| self.lower_expr(a)).collect();
+                            stmts.push(MirStmt::AuthCall {
+                                result: None,
+                                method,
+                                args: mir_args,
+                                dbg_line: line,
+                            });
+                            return;
+                        }
+                        if name.starts_with("__worker_") {
+                            let method = name.strip_prefix("__worker_").unwrap_or(name).to_string();
+                            let mir_args: Vec<MirValue> = args.iter().map(|a| self.lower_expr(a)).collect();
+                            stmts.push(MirStmt::WorkerCall {
+                                result: None,
+                                method,
+                                args: mir_args,
+                                dbg_line: line,
+                            });
+                            return;
+                        }
+                        if name.starts_with("__langchain_") {
+                            let method = name.strip_prefix("__langchain_").unwrap_or(name).to_string();
+                            let mir_args: Vec<MirValue> = args.iter().map(|a| self.lower_expr(a)).collect();
+                            stmts.push(MirStmt::LangChainCall {
+                                result: None,
+                                method,
+                                args: mir_args,
+                                dbg_line: line,
+                            });
+                            return;
+                        }
+                        if name.starts_with("__langgraph_") {
+                            let method = name.strip_prefix("__langgraph_").unwrap_or(name).to_string();
+                            let mir_args: Vec<MirValue> = args.iter().map(|a| self.lower_expr(a)).collect();
+                            stmts.push(MirStmt::LangGraphCall {
+                                result: None,
+                                method,
+                                args: mir_args,
+                                dbg_line: line,
+                            });
+                            return;
+                        }
+                        if name.starts_with("__dict_") {
+                            let method = name.strip_prefix("__dict_").unwrap_or(name).to_string();
+                            let mir_args: Vec<MirValue> = args.iter().map(|a| self.lower_expr(a)).collect();
+                            stmts.push(MirStmt::DictCall {
+                                result: None,
+                                method,
+                                args: mir_args,
+                                dbg_line: line,
+                            });
+                            return;
+                        }
+                        if name.starts_with("__json_") {
+                            let method = name.strip_prefix("__json_").unwrap_or(name).to_string();
+                            let mir_args: Vec<MirValue> = args.iter().map(|a| self.lower_expr(a)).collect();
+                            stmts.push(MirStmt::JsonCall {
+                                result: None,
+                                method,
+                                args: mir_args,
+                                dbg_line: line,
+                            });
+                            return;
+                        }
+                        if name.starts_with("__math_") {
+                            let method = name.strip_prefix("__math_").unwrap_or(name).to_string();
+                            let mir_args: Vec<MirValue> = args.iter().map(|a| self.lower_expr(a)).collect();
+                            stmts.push(MirStmt::MathCall {
+                                result: None,
+                                method,
+                                args: mir_args,
+                                dbg_line: line,
+                            });
+                            return;
+                        }
+                        if name.starts_with("__env_") {
+                            let method = name.strip_prefix("__env_").unwrap_or(name).to_string();
+                            let mir_args: Vec<MirValue> = args.iter().map(|a| self.lower_expr(a)).collect();
+                            stmts.push(MirStmt::EnvCall {
+                                result: None,
+                                method,
+                                args: mir_args,
+                                dbg_line: line,
+                            });
+                            return;
+                        }
+                        if name.starts_with("__http_") {
+                            let method = name.strip_prefix("__http_").unwrap_or(name).to_string();
+                            let mir_args: Vec<MirValue> = args.iter().map(|a| self.lower_expr(a)).collect();
+                            stmts.push(MirStmt::HttpCall {
+                                result: None,
+                                method,
+                                args: mir_args,
+                                dbg_line: line,
+                            });
+                            return;
+                        }
+                        if name == "__is_instanceof" {
+                            let mir_args: Vec<MirValue> = args.iter().map(|a| self.lower_expr(a)).collect();
+                            let val = mir_args.first().cloned().unwrap_or(MirValue::Nil);
+                            let tn = mir_args.get(1).cloned().unwrap_or(MirValue::Nil);
+                            stmts.push(MirStmt::IsCall {
+                                result: None,
+                                value: val,
+                                type_name: tn,
                                 dbg_line: line,
                             });
                             return;
@@ -514,6 +883,23 @@ impl MirLowerer {
                     dbg_line: line,
                 });
             }
+            HirStmt::Wait(millis, _line) => {
+                stmts.push(MirStmt::Wait(*millis, line));
+            }
+            HirStmt::Parallel { blocks, line: _ } => {
+                let mut mir_blocks = Vec::new();
+                for block in blocks {
+                    let mut block_stmts = Vec::new();
+                    for s in &block.stmts {
+                        self.lower_stmt(s, &mut block_stmts);
+                    }
+                    mir_blocks.push(block_stmts);
+                }
+                stmts.push(MirStmt::Parallel {
+                    blocks: mir_blocks,
+                    dbg_line: line,
+                });
+            }
         }
     }
 
@@ -566,6 +952,7 @@ impl MirLowerer {
             HirExpr::Spread(inner) => self.lower_expr(inner),
             HirExpr::BcAnnotation { expr, .. } => self.lower_expr(expr),
             HirExpr::ErrorPropagate(inner) => self.lower_expr(inner),
+            HirExpr::Await(inner) => self.lower_expr(inner),
             HirExpr::Lambda { .. } => MirValue::Nil,
             HirExpr::MethodCall { .. } => MirValue::Nil,
         }
@@ -589,6 +976,7 @@ mod tests {
                 is_async: false,
                 is_lazy: false,
                 is_private: false,
+                schedule_expr: None,
                 line: 1,
             })],
         };
