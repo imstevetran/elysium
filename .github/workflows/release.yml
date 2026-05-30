@@ -39,10 +39,12 @@ jobs:
         run: rustup target add ${{ matrix.target }}
 
       - name: Build binary
+        continue-on-error: true
         working-directory: npm-package
         run: node scripts/build-binaries.js
 
       - uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: binary-${{ matrix.target }}
           path: npm-package/dist/*.gz
@@ -53,6 +55,7 @@ jobs:
   create-release:
     name: Create GitHub Release
     needs: build-binaries
+    if: always()
     permissions:
       contents: write
     runs-on: ubuntu-latest
@@ -60,6 +63,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - uses: actions/download-artifact@v4
+        continue-on-error: true
         with:
           pattern: binary-*
           merge-multiple: true
@@ -76,6 +80,7 @@ jobs:
   publish-npm:
     name: Publish to npm
     needs: create-release
+    if: always()
     permissions:
       id-token: write
       contents: read

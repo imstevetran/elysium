@@ -101,9 +101,6 @@ async function main() {
     gzipBinary(target, binName);
   }
 
-  console.log('');
-  }
-
   console.log(`\nDone! Tarballs in: ${OUT_DIR}`);
 }
 
