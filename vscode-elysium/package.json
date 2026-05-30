@@ -2,7 +2,7 @@
   "name": "elysium-lang",
   "displayName": "Elysium Language",
   "description": "Syntax highlighting for Elysium — a human-friendly, AI-compatible programming language",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "SteveTran",
   "license": "MIT",
   "engines": {
@@ -26,8 +26,14 @@
     "languages": [
       {
         "id": "elysium",
-        "aliases": ["Elysium", "elysium"],
-        "extensions": [".ely", ".elyx"],
+        "aliases": [
+          "Elysium",
+          "elysium"
+        ],
+        "extensions": [
+          ".ely",
+          ".elyx"
+        ],
         "configuration": "./language-configuration.json"
       }
     ],

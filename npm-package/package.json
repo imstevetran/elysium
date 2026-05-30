@@ -1,8 +1,13 @@
 {
   "name": "elysium-lang",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Elysium 2.0 — a human-friendly, AI-compatible programming language compiler and runtime",
-  "keywords": ["elysium", "language", "compiler", "runtime"],
+  "keywords": [
+    "elysium",
+    "language",
+    "compiler",
+    "runtime"
+  ],
   "homepage": "https://github.com/imstevetran/elysium",
   "repository": {
     "type": "git",
@@ -38,8 +43,15 @@
   "engines": {
     "node": ">=16.0.0"
   },
-  "os": ["darwin", "linux", "win32"],
-  "cpu": ["x64", "arm64"],
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ],
   "publishConfig": {
     "access": "public"
   }
