@@ -97,13 +97,11 @@ async function main() {
 
   for (const target of targets) {
     const binName = target.includes('windows') ? 'elysium.exe' : 'elysium';
-    try {
-      cargoBuild(target);
-      gzipBinary(target, binName);
-    } catch (e) {
-      console.error(`  FAILED: ${e.message}`);
-    }
-    console.log('');
+    cargoBuild(target);
+    gzipBinary(target, binName);
+  }
+
+  console.log('');
   }
 
   console.log(`\nDone! Tarballs in: ${OUT_DIR}`);

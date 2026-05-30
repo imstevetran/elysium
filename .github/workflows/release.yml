@@ -25,15 +25,13 @@ jobs:
           - os: macos-latest
             target: aarch64-apple-darwin
             llvm_install: brew install llvm@18
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            llvm_install: choco install llvm --version=18.1.0
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Install LLVM 18
         run: ${{ matrix.llvm_install }}
+        shell: bash
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -74,8 +72,6 @@ jobs:
 
   ##############################################################################
   # Publish the npm package via Trusted Publishing (OIDC).
-  # No NPM_TOKEN needed — the npm CLI auto-detects the OIDC environment.
-  # Requires npm >= 11.5.1 (shipped with Node >= 22.14.0).
   ##############################################################################
   publish-npm:
     name: Publish to npm
@@ -106,9 +102,6 @@ jobs:
       pages: write
       id-token: write
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
 
