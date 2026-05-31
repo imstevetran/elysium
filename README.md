@@ -119,6 +119,41 @@ Then compile and run:
 ely run hello.ely
 ```
 
+### What you get
+
+| Command | Description |
+|---------|-------------|
+| `ely` | Elysium CLI alias |
+| `elysium` | Elysium compiler (build, run, check, lint, REPL, etc.) |
+| `epm` | Elysium Package Manager (init, install, publish, search) |
+
+### Managing packages
+
+```bash
+# Initialize a project
+epm init my-project
+
+# Install a package from the registry
+epm install @elysium/langchain --save
+
+# List installed packages
+epm list
+
+# Search the registry
+epm search langchain
+```
+
+Then import packages in your `.ely` files:
+
+```elysium
+import "#/@elysium/langchain" as langchain
+
+func main() {
+    let result = langchain.llm("gpt-4o-mini", "Hello!")
+    print(result)
+}
+```
+
 ---
 
 ## Documentation
