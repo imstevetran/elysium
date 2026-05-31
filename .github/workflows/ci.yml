@@ -23,11 +23,13 @@ jobs:
         include:
           - os: ubuntu-latest
             llvm-install: |
-              sudo apt-get update && sudo apt-get install -y llvm-18-dev libclang-18-dev
+              sudo apt-get update && sudo apt-get install -y llvm-18-dev libclang-18-dev libpolly-18-dev
           - os: macos-latest
             llvm-install: brew install llvm@18
           - os: windows-latest
-            llvm-install: choco install llvm --version=18.1.0
+            llvm-install: |
+              choco uninstall llvm -y
+              choco install llvm --version=18.1.0 -y
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4

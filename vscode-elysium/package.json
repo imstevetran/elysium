@@ -1,28 +1,76 @@
 {
   "name": "elysium-lang",
   "displayName": "Elysium Language",
-  "description": "Syntax highlighting for Elysium — a human-friendly, AI-compatible programming language",
-  "version": "0.2.0",
+  "description": "Syntax highlighting, CLI commands, and snippets for Elysium — a human-friendly, AI-compatible programming language",
+  "version": "0.3.0",
   "publisher": "SteveTran",
   "license": "MIT",
   "engines": {
     "vscode": "^1.75.0"
   },
   "categories": [
-    "Programming Languages"
+    "Programming Languages",
+    "Other"
   ],
   "keywords": [
     "elysium",
     "ely",
     "elyx",
     "language",
-    "syntax"
+    "syntax",
+    "compiler"
   ],
   "repository": {
     "type": "git",
     "url": "https://github.com/imstevetran/ellysium-pl.git"
   },
+  "main": "./src/extension.js",
+  "activationEvents": [
+    "onLanguage:elysium",
+    "onCommand:elysium.run",
+    "onCommand:elysium.build",
+    "onCommand:elysium.check",
+    "onCommand:elysium.test",
+    "onCommand:elysium.init",
+    "onCommand:elysium.install",
+    "onCommand:elysium.publish",
+    "onCommand:elysium.update"
+  ],
   "contributes": {
+    "commands": [
+      {
+        "command": "elysium.run",
+        "title": "Elysium: Run active file"
+      },
+      {
+        "command": "elysium.build",
+        "title": "Elysium: Build active file"
+      },
+      {
+        "command": "elysium.check",
+        "title": "Elysium: Check (type-check) active file"
+      },
+      {
+        "command": "elysium.test",
+        "title": "Elysium: Run tests"
+      },
+      {
+        "command": "elysium.init",
+        "title": "Elysium: Initialize a new package"
+      },
+      {
+        "command": "elysium.install",
+        "title": "Elysium: Install a package from registry"
+      },
+      {
+        "command": "elysium.publish",
+        "title": "Elysium: Publish current package"
+      },
+      {
+        "command": "elysium.update",
+        "title": "Elysium: Update all packages"
+      }
+    ],
     "languages": [
       {
         "id": "elysium",
@@ -48,6 +96,47 @@
       {
         "language": "elysium",
         "path": "./snippets/elysium.json"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "elysium.run",
+          "group": "elysium@1",
+          "when": "editorLangId == elysium"
+        },
+        {
+          "command": "elysium.build",
+          "group": "elysium@2",
+          "when": "editorLangId == elysium"
+        },
+        {
+          "command": "elysium.check",
+          "group": "elysium@3",
+          "when": "editorLangId == elysium"
+        },
+        {
+          "command": "elysium.test",
+          "group": "elysium@4",
+          "when": "editorLangId == elysium"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "elysium.run",
+        "key": "ctrl+alt+r",
+        "when": "editorLangId == elysium"
+      },
+      {
+        "command": "elysium.build",
+        "key": "ctrl+alt+b",
+        "when": "editorLangId == elysium"
+      },
+      {
+        "command": "elysium.test",
+        "key": "ctrl+alt+t",
+        "when": "editorLangId == elysium"
       }
     ]
   }

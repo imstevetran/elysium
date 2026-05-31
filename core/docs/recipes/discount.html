@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Discount Calculator — Elysium Recipes</title>
+  <meta name="description" content="A full-featured Elysium example combining bc, if-then, only, spread, and doc comments." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../assets/css/style.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>⚡</text></svg>" />
+</head>
+<body>
+  <header class="navbar">
+    <a href="../" class="logo"><svg viewBox="0 0 28 28" fill="none"><rect x="2" y="2" width="24" height="24" rx="6" stroke="%236c63ff" stroke-width="2" /><text x="14" y="20" text-anchor="middle" font-size="16" font-weight="bold" fill="%236c63ff">E</text></svg><span>Elysium</span></a>
+    <button class="menu-toggle" aria-label="Toggle menu"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
+    <nav>
+      <a href="../guide/">Guide</a>
+      <a href="../ui/">UI</a>
+      <a href="../std/">Std Lib</a>
+      <a href="../spec/">Spec</a>
+      <a href="../packages/">Packages</a>
+      <a href="../tooling/">Tooling</a>
+      <a href="../recipes/" class="active">Recipes</a>
+    </nav>
+  </header>
+  <main class="main">
+    <div class="breadcrumbs"><a href="../">Home</a> / <a href="./">Recipes</a> / <span>Discount Calculator</span></div>
+    <div class="page-header">
+      <h1>Discount Calculator</h1>
+      <p>A showcase of multiple Elysium language features in one concise function. <span class="tag diff-advanced">Advanced</span></p>
+    </div>
+    <section class="content-section animate-on-scroll">
+      <h2>Code</h2>
+<div class="code-header"><span>discount.ely</span></div>
+<pre><code><span class="hl-comment">/// Summary: Calculate discount for a customer.</span>
+<span class="hl-kw">func</span> <span class="hl-fn">discount</span>(age: <span class="hl-type">Int</span>, purchases: [<span class="hl-type">Float</span>]) <span class="hl-op">-&gt;</span> <span class="hl-type">Float</span> <span class="hl-kw">bc</span> <span class="hl-str">"Discount policy v3.2"</span> {
+    <span class="hl-kw">let</span> adultAge = <span class="hl-num">18</span> <span class="hl-kw">bc</span> <span class="hl-str">"legal adult age"</span>
+
+    <span class="hl-kw">only</span> age &gt; <span class="hl-num">0</span> <span class="hl-kw">do</span> {
+        <span class="hl-kw">let</span> base = <span class="hl-kw">if</span> age &gt;= adultAge <span class="hl-kw">then</span> <span class="hl-num">0.10</span> <span class="hl-kw">else</span> <span class="hl-num">0.05</span>
+        <span class="hl-kw">let</span> total = sum(<span class="hl-op">…</span>purchases) <span class="hl-kw">bc</span> <span class="hl-str">"total of all purchases"</span>
+        <span class="hl-kw">let</span> extra = <span class="hl-kw">if</span> total &gt; <span class="hl-num">500</span> <span class="hl-kw">then</span> <span class="hl-num">0.05</span> <span class="hl-kw">else</span> <span class="hl-num">0.0</span>
+        min(base + extra, <span class="hl-num">0.20</span>)
+    }
+}</code></pre>
+    </section>
+    <section class="content-section animate-on-scroll">
+      <h2>Features Demonstrated</h2>
+      <table>
+        <tr><th>Feature</th><th>Usage</th></tr>
+        <tr><td><code>/// Summary:</code> doc comment</td><td>Required documentation — enforced by compiler</td></tr>
+        <tr><td><code>bc</code> on function</td><td>Documents business policy: <code>"Discount policy v3.2"</code></td></tr>
+        <tr><td><code>bc</code> on variables</td><td>Annotates values with intent: <code>18 bc "legal adult age"</code></td></tr>
+        <tr><td><code>only … do</code> guard</td><td>Ensures age is positive before computation</td></tr>
+        <tr><td><code>if … then … else</code></td><td>Expression-form conditional for base rate and extra discount</td></tr>
+        <tr><td><code>…</code> spread</td><td>Spreads <code>purchases</code> array into <code>sum()</code></td></tr>
+        <tr><td>Implicit return</td><td>Last expression <code>min(base + extra, 0.20)</code> is returned</td></tr>
+      </table>
+    </section>
+  </main>
+  <footer class="footer"><p>Elysium 2.0 &middot; <a href="https://github.com/imstevetran/elysium">GitHub</a></p></footer>
+  <script src="../assets/js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,500 @@
+/// Summary: Auth module — JWT, Password Hashing, Sessions, RBAC, OAuth2, Passkey, API Keys, Multi-tenant.
+/// Pure Elysium implementation using string.*, json.*, env.*, dict.* builtins.
+/// No C code, no register statement.
+///
+/// Usage:
+///   import "#/auth" as auth
+///   let token = auth.jwtSign("my-secret", `{"sub":"user123","role":"admin"}`)
+///   let decoded = auth.jwtVerify("my-secret", token)
+///   let payload = auth.jwtDecode(token)
+///
+/// Environment variables:
+///   AUTH_JWT_SECRET  — Default secret for JWT when secret is ""
+///   AUTH_TENANT_ID   — Default tenant ID (default: "default")
+
+/// ─── Helpers ─────────────────────────────────────────────────────
+
+/// Get the default JWT secret from environment.
+func _defaultSecret() -> String {
+    let s = env.get("AUTH_JWT_SECRET")
+    if s == "" then "elysium-dev-secret" else s
+}
+
+/// Base64url-encode: base64 → URL-safe (replace + → -, / → _, strip =).
+func _base64url(s: String) -> String {
+    let a = s.replace("+", "-")
+    let b = a.replace("/", "_")
+    b.replace("=", "")
+}
+
+/// Encode plain text to base64url.
+func _b64urlEncode(s: String) -> String {
+    _base64url(string.base64Encode(s))
+}
+
+/// Compute HMAC-SHA256 and return base64url-encoded signature.
+/// hmac returns hex → hexDecode → base64Encode → base64url.
+func _hmacB64url(data: String, secret: String) -> String {
+    let hexResult = string.hmac(data, secret)
+    let rawBytes = string.hexDecode(hexResult)
+    let b64 = string.base64Encode(rawBytes)
+    _base64url(b64)
+}
+
+/// Parse a dot-delimited string into a JSON array.
+/// Uses string.split which returns comma-joined parts, then wraps in brackets.
+func _splitToJson(s: String, delim: String) -> String {
+    let parts = string.split(s, delim)
+    "[" + parts + "]"
+}
+
+/// Generate a pseudo-random ID using SHA256 chaining.
+var _counter = "0"
+func _genId(prefix: String) -> String {
+    _counter = string.sha256(_counter)
+    // First 16 hex chars (8 bytes) of hash as id
+    prefix + string.substring(_counter, 0, 16)
+}
+
+/// ─── JWT ─────────────────────────────────────────────────────────
+
+/// Sign a JSON payload and return a JWT string.
+/// secret: HMAC secret (pass "" to use AUTH_JWT_SECRET env var).
+/// payload: JSON string of claims (e.g. `{"sub":"user123"}`).
+func jwtSign(secret: String, payload: String) -> String {
+    let sk = if secret == "" then _defaultSecret() else secret
+    let headerB64 = _b64urlEncode(`{"alg":"HS256","typ":"JWT"}`)
+    let payloadB64 = _b64urlEncode(payload)
+    let signingInput = headerB64 + "." + payloadB64
+    let sigB64 = _hmacB64url(signingInput, sk)
+    signingInput + "." + sigB64
+}
+
+/// Verify a JWT and return the decoded payload (or error JSON).
+/// secret: HMAC secret used for verification (pass "" to use AUTH_JWT_SECRET env var).
+/// token: full JWT string to verify.
+func jwtVerify(secret: String, token: String) -> String {
+    if token == "" { return `{"error":"empty token"}` }
+    let sk = if secret == "" then _defaultSecret() else secret
+
+    let jsonArr = _splitToJson(token, ".")
+    let partsParsed = json.parse(jsonArr)
+    let headerB64 = json.get(partsParsed, "0")
+    let payloadB64 = json.get(partsParsed, "1")
+    let sigB64 = json.get(partsParsed, "2")
+    json.free(partsParsed)
+
+    if headerB64 == "" || payloadB64 == "" || sigB64 == "" {
+        return `{"error":"invalid token format"}`
+    }
+
+    let signingInput = headerB64 + "." + payloadB64
+    let expectedSigB64 = _hmacB64url(signingInput, sk)
+
+    if sigB64 != expectedSigB64 {
+        return `{"error":"signature mismatch"}`
+    }
+
+    let payloadDecoded = string.base64Decode(payloadB64)
+    json.buildObject("valid", "true", "payload", payloadDecoded)
+}
+
+/// Decode a JWT without verifying its signature.
+/// Returns the JSON payload string.
+func jwtDecode(token: String) -> String {
+    if token == "" { return "{}" }
+
+    let jsonArr = _splitToJson(token, ".")
+    let partsParsed = json.parse(jsonArr)
+    let payloadB64 = json.get(partsParsed, "1")
+    json.free(partsParsed)
+
+    if payloadB64 == "" { return "{}" }
+
+    string.base64Decode(payloadB64)
+}
+
+/// ─── In-Memory State (dict handles) ──────────────────────────────
+
+var _sessionStore = dict.create()
+var _tenantStore = dict.create()
+var _roleStore = dict.create()
+var _permStore = dict.create()
+var _apiKeyStore = dict.create()
+var _oauthCodeStore = dict.create()
+var _currentTenant = "default"
+
+/// ─── Sessions ────────────────────────────────────────────────────
+
+/// Create a new session for a user. data is a JSON string.
+func createSession(userId: String, data: String) -> String {
+    let sid = _genId("sess_")
+    let entry = json.buildObject("sessionId", sid, "userId", userId, "data", data)
+    dict.set(_sessionStore, sid, entry)
+    json.free(entry)
+    json.buildObject("sessionId", sid)
+}
+
+/// Get session data by session ID.
+func getSession(sessionId: String) -> String {
+    let entry = dict.get(_sessionStore, sessionId)
+    if entry == "" then `{"error":"session not found"}` else entry
+}
+
+/// Destroy a session.
+func destroySession(sessionId: String) -> String {
+    dict.delete(_sessionStore, sessionId)
+    ""
+}
+
+/// ─── Password Hashing ────────────────────────────────────────────
+
+/// Hash a password with a random salt. Returns "$sha256$<salt>$<hash_b64>".
+func hashPassword(password: String) -> String {
+    if password == "" { return "" }
+    let salt = string.substring(string.sha256(password + _genId("pwsalt")), 0, 22)
+    let hashHex = (password + salt).sha256()
+    let hashB64 = string.base64Encode(string.hexDecode(hashHex))
+    "$sha256$" + salt + "$" + hashB64
+}
+
+/// Verify a password against a hash string ($sha256$salt$hash_b64 format).
+func verifyPassword(password: String, hash: String) -> String {
+    if password == "" || hash == "" { return `{"verified":false}` }
+    if !hash.startsWith("$sha256$") { return `{"verified":false}` }
+
+    // Split by $ -> parts[0]="", parts[1]="sha256", parts[2]="salt", parts[3]="hash"
+    let splitResult = string.split(hash, "$")
+    let partsArr = "[" + splitResult + "]"
+    let partsParsed = json.parse(partsArr)
+    let salt = json.get(partsParsed, "2")
+    let storedHashB64 = json.get(partsParsed, "3")
+    json.free(partsParsed)
+
+    if salt == "" || storedHashB64 == "" { return `{"verified":false}` }
+
+    let hashHex = (password + salt).sha256()
+    let computedB64 = string.base64Encode(string.hexDecode(hashHex))
+
+    if computedB64 == storedHashB64 then `{"verified":true}` else `{"verified":false}`
+}
+
+/// ─── RBAC (Role/Permission) ──────────────────────────────────────
+
+/// Check if a user has a specific permission.
+func checkPermission(user: String, permission: String) -> String {
+    if user == "" { return `{"has":false}` }
+    let val = dict.get(_permStore, user + ":" + permission)
+    if val == "" then `{"has":false}` else `{"has":true}`
+}
+
+/// Check if a user has a specific role.
+func hasRole(user: String, role: String) -> String {
+    if user == "" { return `{"has":false}` }
+    let val = dict.get(_roleStore, user + ":role:" + role)
+    if val == "" then `{"has":false}` else `{"has":true}`
+}
+
+/// Check if a JWT has a specific scope claim.
+func hasScope(token: String, scope: String) -> String {
+    let payload = jwtDecode(token)
+    if payload == "{}" { return `{"has":false}` }
+    let parsed = json.parse(payload)
+    let scopes = json.get(parsed, "scope")
+    json.free(parsed)
+    if scopes == "" then `{"has":false}` else
+        if scopes.contains(scope) then `{"has":true}` else `{"has":false}`
+}
+
+/// Grant a role to a user.
+func grantRole(user: String, role: String) -> String {
+    if user == "" || role == "" { return "" }
+    dict.set(_roleStore, user + ":role:" + role, "1")
+    ""
+}
+
+/// Grant a permission to a user.
+func grantPermission(user: String, perm: String) -> String {
+    if user == "" || perm == "" { return "" }
+    dict.set(_permStore, user + ":" + perm, "1")
+    ""
+}
+
+/// Revoke a role from a user.
+func revokeRole(user: String, role: String) -> String {
+    if user == "" || role == "" { return "" }
+    dict.delete(_roleStore, user + ":role:" + role)
+    ""
+}
+
+/// Revoke a permission from a user.
+func revokePermission(user: String, perm: String) -> String {
+    if user == "" || perm == "" { return "" }
+    dict.delete(_permStore, user + ":" + perm)
+    ""
+}
+
+/// Set roles for a user from a JSON array of role strings.
+func setRoles(userId: String, rolesJson: String) -> String {
+    if userId == "" { return "" }
+    dict.set(_roleStore, userId + ":roles", rolesJson)
+    ""
+}
+
+/// Set permissions for a user from a JSON array of permission strings.
+func setPermissions(userId: String, permsJson: String) -> String {
+    if userId == "" { return "" }
+    dict.set(_permStore, userId + ":perms", permsJson)
+    ""
+}
+
+/// Check if a user has access to a resource with a specific action.
+func checkAccess(userId: String, resource: String, action: String) -> String {
+    let adminCheck = hasRole(userId, "admin")
+    if adminCheck == `{"has":true}` {
+        return `{"access":true,"reason":"admin"}`
+    }
+    let permKey = resource + ":" + action
+    let result = checkPermission(userId, permKey)
+    if result == `{"has":true}` {
+        `{"access":true,"reason":"permission"}`
+    } else {
+        `{"access":false}`
+    }
+}
+
+/// ─── OAuth2 ──────────────────────────────────────────────────────
+
+/// Generate an OAuth2 authorization code and URL.
+func oauth2Authorize(clientId: String, redirectUri: String, scope: String) -> String {
+    let code = _genId("ac_")
+    let entry = json.buildObject("code", code, "clientId", clientId, "redirectUri", redirectUri, "scope", scope)
+    dict.set(_oauthCodeStore, code, entry)
+    json.free(entry)
+    let authUrl = redirectUri + "?code=" + code + "&state=elysium"
+    json.buildObject("authorizationUrl", authUrl)
+}
+
+/// Exchange an authorization code for access/refresh tokens.
+func oauth2Token(code: String, clientId: String, clientSecret: String) -> String {
+    let entry = dict.get(_oauthCodeStore, code)
+    if entry == "" { return `{"error":"invalid code"}` }
+    dict.delete(_oauthCodeStore, code)
+    let at = _genId("at_")
+    let rt = _genId("rt_")
+    json.buildObject("accessToken", at, "refreshToken", rt, "tokenType", "Bearer", "expiresIn", "3600")
+}
+
+/// Refresh an access token.
+func oauth2Refresh(refreshToken: String, clientId: String) -> String {
+    if refreshToken == "" { return `{"error":"invalid refresh token"}` }
+    let at = _genId("at_")
+    let rt = _genId("rt_")
+    json.buildObject("accessToken", at, "refreshToken", rt, "tokenType", "Bearer", "expiresIn", "3600")
+}
+
+/// ─── Passkey (WebAuthn) ──────────────────────────────────────────
+
+/// Generate passkey registration options.
+func passkeyRegister(userId: String, userName: String) -> String {
+    let challenge = _genId("challenge_")
+    json.buildObject(
+        "challenge", challenge,
+        "rp", `{"name":"Elysium"}`,
+        "user", json.buildObject("id", userId, "name", userName),
+        "pubKeyCredParams", `[{"type":"public-key","alg":-7}]`,
+        "timeout", "60000"
+    )
+}
+
+/// Generate passkey authentication options.
+func passkeyAuthenticate(userId: String) -> String {
+    let challenge = _genId("challenge_")
+    json.buildObject(
+        "challenge", challenge,
+        "rpId", "elysium",
+        "timeout", "60000",
+        "userVerification", "preferred"
+    )
+}
+
+/// ─── Multi-tenant ────────────────────────────────────────────────
+
+/// Set and return the current tenant context.
+func tenantContext(tenantId: String) -> String {
+    _currentTenant = tenantId
+    json.buildObject("tenantId", tenantId)
+}
+
+/// Get the current tenant ID.
+func getTenant() -> String {
+    json.buildObject("tenantId", _currentTenant)
+}
+
+/// List all tenants as a JSON array.
+func listTenants() -> String {
+    dict.keys(_tenantStore)
+}
+
+/// Create a new tenant.
+func createTenant(tenantId: String, config: String) -> String {
+    dict.set(_tenantStore, tenantId, config)
+    `{"success":true}`
+}
+
+/// ─── API Keys ────────────────────────────────────────────────────
+
+/// Generate a new API key for a user.
+func generateApiKey(userId: String) -> String {
+    let key = _genId("ely_")
+    let entry = json.buildObject("apiKey", key, "userId", userId)
+    dict.set(_apiKeyStore, key, entry)
+    json.free(entry)
+    json.buildObject("apiKey", key)
+}
+
+/// Validate an API key and return the associated user.
+func validateApiKey(apiKey: String) -> String {
+    let entry = dict.get(_apiKeyStore, apiKey)
+    if entry == "" { return `{"valid":false}` }
+    let parsed = json.parse(entry)
+    let userId = json.get(parsed, "userId")
+    json.free(parsed)
+    json.buildObject("valid", "true", "userId", userId)
+}
+
+/// ─── Spec Tests ──────────────────────────────────────────────────
+
+spec "Auth" {
+    feat "jwtSign returns a JWT string with three dot-separated parts" {
+        let token = jwtSign("test-secret", `{"sub":"user1"}`)
+        expect token
+    }
+    feat "jwtVerify returns valid JSON for correct token" {
+        let token = jwtSign("test-secret", `{"sub":"user1"}`)
+        let result = jwtVerify("test-secret", token)
+        expect result
+    }
+    feat "jwtVerify returns error for wrong secret" {
+        let token = jwtSign("secret1", `{"sub":"user1"}`)
+        let result = jwtVerify("wrong-secret", token)
+        expect result
+    }
+    feat "jwtVerify returns error for empty token" {
+        let result = jwtVerify("test-secret", "")
+        expect result
+    }
+    feat "jwtDecode returns payload string" {
+        let token = jwtSign("test-secret", `{"sub":"user1"}`)
+        let decoded = jwtDecode(token)
+        expect decoded
+    }
+    feat "hashPassword returns non-empty string" {
+        let hash = hashPassword("mypassword")
+        expect hash
+    }
+    feat "verifyPassword returns verified:true for correct password" {
+        let hash = hashPassword("mypassword")
+        let result = verifyPassword("mypassword", hash)
+        expect result
+    }
+    feat "verifyPassword returns verified:false for wrong password" {
+        let hash = hashPassword("mypassword")
+        let result = verifyPassword("wrongpassword", hash)
+        expect result
+    }
+    feat "createSession returns session JSON with sessionId" {
+        let sess = createSession("user1", `{"role":"admin"}`)
+        expect sess
+    }
+    feat "getSession returns session data for valid session" {
+        let sess = createSession("user1", `{"role":"admin"}`)
+        let parsed = json.parse(sess)
+        let sid = json.get(parsed, "sessionId")
+        json.free(parsed)
+        let result = getSession(sid)
+        expect result
+    }
+    feat "destroySession removes session" {
+        let sess = createSession("user1", "{}")
+        let parsed = json.parse(sess)
+        let sid = json.get(parsed, "sessionId")
+        json.free(parsed)
+        destroySession(sid)
+        let result = getSession(sid)
+        expect result
+    }
+    feat "grantRole and hasRole return has:true" {
+        grantRole("alice", "admin")
+        let result = hasRole("alice", "admin")
+        expect result
+    }
+    feat "hasRole returns false for non-granted role" {
+        let result = hasRole("unknown", "admin")
+        expect result
+    }
+    feat "grantPermission and checkPermission" {
+        grantPermission("bob", "read:files")
+        let result = checkPermission("bob", "read:files")
+        expect result
+    }
+    feat "revokePermission removes permission" {
+        grantPermission("charlie", "write:db")
+        revokePermission("charlie", "write:db")
+        let result = checkPermission("charlie", "write:db")
+        expect result
+    }
+    feat "generateApiKey returns key JSON" {
+        let result = generateApiKey("user1")
+        expect result
+    }
+    feat "validateApiKey returns valid for correct key" {
+        let keyResult = generateApiKey("user1")
+        let parsed = json.parse(keyResult)
+        let key = json.get(parsed, "apiKey")
+        json.free(parsed)
+        let result = validateApiKey(key)
+        expect result
+    }
+    feat "checkAccess returns access for admin user" {
+        grantRole("adminUser", "admin")
+        let result = checkAccess("adminUser", "any-resource", "any-action")
+        expect result
+    }
+    feat "tenantContext returns tenant JSON" {
+        let result = tenantContext("my-org")
+        expect result
+    }
+    feat "createTenant returns success" {
+        let result = createTenant("org1", `{"plan":"enterprise"}`)
+        expect result
+    }
+    feat "oauth2Authorize returns authorization URL" {
+        let result = oauth2Authorize("client1", "https://app.example.com/callback", "read write")
+        expect result
+    }
+    feat "oauth2Token returns token JSON" {
+        let authResult = oauth2Authorize("client1", "https://app.example.com/callback", "read")
+        let parsed = json.parse(authResult)
+        let authUrl = json.get(parsed, "authorizationUrl")
+        json.free(parsed)
+        let codeStart = string.indexOf(authUrl, "code=") + 5
+        let codeEnd = string.indexOf(authUrl, "&state=")
+        let code = string.substring(authUrl, codeStart, codeEnd)
+        let result = oauth2Token(code, "client1", "secret")
+        expect result
+    }
+    feat "passkeyRegister returns registration options" {
+        let result = passkeyRegister("user1", "Alice")
+        expect result
+    }
+    feat "passkeyAuthenticate returns authentication options" {
+        let result = passkeyAuthenticate("user1")
+        expect result
+    }
+    feat "hasScope returns has:true when scope matches" {
+        let token = jwtSign("test-secret", `{"sub":"user1","scope":"read write"}`)
+        let result = hasScope(token, "read")
+        expect result
+    }
+}

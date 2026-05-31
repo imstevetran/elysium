@@ -1,0 +1,12 @@
+/// Summary: Demonstrate JWT sign, verify, and decode with the auth package.
+
+func main() {
+    print("=== JWT ===")
+    let token = auth.jwtSign("my-secret", `{"sub":"user123","role":"admin"}`)
+    print("token:", token)
+    let verified = auth.jwtVerify("my-secret", token)
+    print("verified:", verified)
+    let decoded = auth.jwtDecode(token)
+    print("decoded:", decoded)
+    print("=== done ===")
+}

@@ -127,4 +127,4 @@ node -e "const e = require('./npm-package/runtime/index'); console.log(typeof e.
    - Builds native binaries for Linux x64, macOS ARM64, Windows x64
    - Creates a GitHub Release with binaries attached
    - Publishes to npm via Trusted Publishing (OIDC)
-   - Deploys docs to GitHub Pages
+   - Docs mirror to `elysiumlang.github.io` is handled by `docs-mirror.yml` on `main` (not on release tags)

@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Functions &amp; Imports — Elysium Recipes</title>
+  <meta name="description" content="Define reusable functions and import them across files with or without aliases." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../assets/css/style.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>⚡</text></svg>" />
+</head>
+<body>
+  <header class="navbar">
+    <a href="../" class="logo"><svg viewBox="0 0 28 28" fill="none"><rect x="2" y="2" width="24" height="24" rx="6" stroke="%236c63ff" stroke-width="2" /><text x="14" y="20" text-anchor="middle" font-size="16" font-weight="bold" fill="%236c63ff">E</text></svg><span>Elysium</span></a>
+    <button class="menu-toggle" aria-label="Toggle menu"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
+    <nav>
+      <a href="../guide/">Guide</a>
+      <a href="../ui/">UI</a>
+      <a href="../std/">Std Lib</a>
+      <a href="../spec/">Spec</a>
+      <a href="../packages/">Packages</a>
+      <a href="../tooling/">Tooling</a>
+      <a href="../recipes/" class="active">Recipes</a>
+    </nav>
+  </header>
+  <main class="main">
+    <div class="breadcrumbs"><a href="../">Home</a> / <a href="./">Recipes</a> / <span>Functions &amp; Imports</span></div>
+    <div class="page-header">
+      <h1>Functions &amp; Imports</h1>
+      <p>Define reusable functions and import them across files. <span class="tag diff-beginner">Beginner</span></p>
+    </div>
+    <section class="content-section animate-on-scroll">
+      <h2>1. Define a Library Module</h2>
+<div class="code-header"><span>math.ely</span></div>
+<pre><code><span class="hl-comment">/// Summary: Utility math functions.</span>
+<span class="hl-kw">func</span> <span class="hl-fn">square</span>(x: <span class="hl-type">Int</span>) <span class="hl-op">-&gt;</span> <span class="hl-type">Int</span> { x * x }
+<span class="hl-kw">func</span> <span class="hl-fn">double</span>(x: <span class="hl-type">Int</span>) <span class="hl-op">-&gt;</span> <span class="hl-type">Int</span> { x + x }</code></pre>
+    </section>
+    <section class="content-section animate-on-scroll">
+      <h2>2. Import Without Alias</h2>
+      <p>Functions are inlined into the importing module's namespace.</p>
+<div class="code-header"><span>main.ely</span></div>
+<pre><code><span class="hl-comment">/// Summary: Main program that imports math utilities.</span>
+<span class="hl-kw">import</span> <span class="hl-str">"./math.ely"</span>
+
+<span class="hl-kw">let</span> a = <span class="hl-num">5</span>
+<span class="hl-kw">let</span> sq = square(a)
+<span class="hl-kw">let</span> db = double(a)
+print(sq)
+print(db)</code></pre>
+    </section>
+    <section class="content-section animate-on-scroll">
+      <h2>3. Import With Alias</h2>
+      <p>Use <code>import ... as alias</code> to namespace functions. Calls like <code>alias.fn()</code> desugar to <code>alias_fn()</code>.</p>
+<div class="code-header"><span>main_alias.ely</span></div>
+<pre><code><span class="hl-comment">/// Summary: Using import-as alias.</span>
+<span class="hl-kw">import</span> <span class="hl-str">"./math.ely"</span> <span class="hl-kw">as</span> math
+
+<span class="hl-kw">let</span> a = <span class="hl-num">5</span>
+<span class="hl-kw">let</span> sq = math.square(a)
+<span class="hl-kw">let</span> db = math.double(a)
+print(sq)
+print(db)</code></pre>
+    </section>
+    <section class="content-section animate-on-scroll">
+      <h2>Key Points</h2>
+      <ul>
+        <li>Imports resolve relative paths from the importing file's directory.</li>
+        <li>Aliased imports prevent name collisions — use them for third-party libraries.</li>
+        <li>Import without alias is convenient for internal modules.</li>
+        <li>Spec blocks can import modules too (see <a href="spec-testing.html">Spec-Driven Testing</a> recipe).</li>
+      </ul>
+    </section>
+  </main>
+  <footer class="footer"><p>Elysium 2.0 &middot; <a href="https://github.com/imstevetran/elysium">GitHub</a></p></footer>
+  <script src="../assets/js/main.js"></script>
+</body>
+</html>

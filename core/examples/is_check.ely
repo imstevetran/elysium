@@ -1,0 +1,8 @@
+/// Summary: Demonstrate the `is` operator for runtime type checking.
+
+func main() {
+    print("=== is operator ===")
+    let s = "hello"
+    print("s is String:", s is String)
+    print("=== done ===")
+}

@@ -1,0 +1,12 @@
+extension "json" {
+    keywords: [
+        "json.parse",
+        "json.stringify",
+        "json.buildObject",
+        "json.buildArray",
+        "json.get",
+        "json.free",
+        "json.buildMessage"
+    ],
+    runtime: { other: "./runtime/json.c" }
+}

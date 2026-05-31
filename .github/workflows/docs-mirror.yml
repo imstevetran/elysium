@@ -1,0 +1,30 @@
+name: Mirror Docs
+
+# Pushes core/docs to elysiumlang/elysiumlang.github.io (docs-only Pages repo).
+# Requires secret DOCS_DEPLOY_TOKEN with push access to that repository.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'core/docs/**'
+      - '.github/workflows/docs-mirror.yml'
+  workflow_dispatch:
+
+jobs:
+  mirror:
+    name: Mirror to elysiumlang.github.io
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Push core/docs to Pages repo
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          token: ${{ secrets.DOCS_DEPLOY_TOKEN }}
+          branch: main
+          folder: core/docs
+          repository-name: elysiumlang/elysiumlang.github.io
+          clean: true
+          single-commit: true
+          commit-message: 'docs: mirror from ${{ github.repository }}@${{ github.sha }}'

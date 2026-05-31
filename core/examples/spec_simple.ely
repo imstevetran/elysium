@@ -1,0 +1,19 @@
+/// Simple spec example demonstrating the spec/feat/expect syntax
+func add(a: Int, b: Int) -> Int {
+    a + b
+}
+
+spec "Calculator" {
+    feat "adds two numbers" {
+        let result = add(2, 3)
+        expect result == 5
+    }
+    feat "adds negative numbers" {
+        let result = add(-1, -2)
+        expect result == -3
+    }
+    feat "returns Int" {
+        let result = add(10, 20)
+        expect result
+    }
+}

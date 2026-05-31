@@ -21,7 +21,7 @@ jobs:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             llvm_install: |
-              sudo apt-get update && sudo apt-get install -y llvm-18-dev libclang-18-dev
+              sudo apt-get update && sudo apt-get install -y llvm-18-dev libclang-18-dev libpolly-18-dev
           - os: macos-latest
             target: aarch64-apple-darwin
             llvm_install: brew install llvm@18
@@ -96,25 +96,3 @@ jobs:
       - name: Publish package
         working-directory: npm-package
         run: npm publish
-
-  ##############################################################################
-  # Deploy the static docs site to GitHub Pages
-  ##############################################################################
-  deploy-pages:
-    name: Deploy GitHub Pages
-    permissions:
-      contents: read
-      pages: write
-      id-token: write
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/configure-pages@v5
-
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: docs
-
-      - id: deployment
-        uses: actions/deploy-pages@v4

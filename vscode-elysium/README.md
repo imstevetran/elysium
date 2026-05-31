@@ -7,19 +7,35 @@ Elysium is a human-friendly, AI-compatible language with: ARC memory management,
 ## Features
 
 - **Syntax highlighting** for `.ely` and `.elyx` files
-- **Code snippets** for common Elysium constructs (func, let, var, for, if, class, component, spec, etc.)
+- **CLI commands** — run, build, check, test, init, install, publish, update (via `Ctrl+Alt+R/B/T` or right-click menu)
+- **Code snippets** for common Elysium constructs (func, let, var, for, if, class, component, spec, extension, switch, render, etc.)
 - **Language configuration**: bracket matching, auto-closing pairs, indentation rules, comment toggling
 
 ## Supported Constructs
 
 | Category | Examples |
 |----------|---------|
-| Keywords | `let`, `var`, `func`, `if`, `else`, `then`, `for`, `in`, `while`, `return`, `match`, `case`, `switch`, `import`, `as`, `class`, `init`, `enum`, `component`, `state`, `render`, `async`, `await`, `parallel`, `private`, `lazy`, `stub`, `try`, `catch`, `finally`, `do`, `bc`, `because`, `only`, `unsafe`, `weak`, `unowned` |
+| Keywords | `let`, `var`, `func`, `if`, `else`, `then`, `for`, `in`, `while`, `return`, `match`, `case`, `switch`, `import`, `as`, `class`, `init`, `enum`, `component`, `state`, `render`, `extension`, `async`, `await`, `parallel`, `private`, `lazy`, `stub`, `try`, `catch`, `finally`, `do`, `bc`, `because`, `only`, `unsafe`, `weak`, `unowned` |
 | Spec-driven | `spec`, `describe`, `feat`, `it`, `expect`, `todo`, `question`, `bench`, `bm` |
-| Types | `Int`, `Float`, `Bool`, `String`, `Char`, `Nil`, `Option`, `Result`, `Array`, `Self` |
-| Builtins | `print`, `sum`, `min`, `max`, `abs`, `len`, `count`, `isEmpty`, `map`, `filter`, `reduce` |
+| Types | `Int`, `Float`, `Bool`, `String`, `Char`, `Nil`, `Option`, `Result`, `Array`, `Dict`, `Self` |
+| Builtins | `print`, `console`, `fs`, `transport`, `string`, `regex`, `datetime`, `math`, `dict`, `json`, `env`, `http`, `worker` |
 | Comments | `//` line, `///` doc, `/* */` block |
-| .elyx UI | `component`, `state`, `render`, XML/JSX-like tags |
+| .elyx UI | `component`, `state`, `render`, XML/JSX-like tags, `style`, event handlers |
+
+## CLI Commands
+
+| Command | Keybinding | Description |
+|---------|-----------|-------------|
+| `Elysium: Run active file` | `Ctrl+Alt+R` | Compile and run the current `.ely`/`.elyx` file |
+| `Elysium: Build active file` | `Ctrl+Alt+B` | Compile to native binary |
+| `Elysium: Check active file` | | Type-check only |
+| `Elysium: Run tests` | `Ctrl+Alt+T` | Run all spec tests in the project |
+| `Elysium: Init Package` | | Create a new package with manifest |
+| `Elysium: Install Package` | | Install a package from the EPM registry |
+| `Elysium: Publish Package` | | Publish the current package |
+| `Elysium: Update Packages` | | Update all installed packages |
+
+Commands are also available via the right-click context menu on `.ely`/`.elyx` files.
 
 ## Installation
 

@@ -1,0 +1,2 @@
+let msg = json.buildMessage("user", "hello from json ext")
+print(msg)

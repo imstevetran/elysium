@@ -2,6 +2,7 @@
   "name": "ellysium-pl",
   "version": "0.1.0",
   "description": "Elysium programming language project",
+  "extensions": ["extensions/json"],
   "environments": {
     "local": "local",
     "dev": "dev",

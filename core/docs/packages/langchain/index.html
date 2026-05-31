@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>langchain — Elysium Package</title>
+  <meta name="description" content="Elysium LangChain package — LLM calls, chains, prompts, tool integration, RAG, agents, and streaming." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../assets/css/style.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>⚡</text></svg>" />
+</head>
+<body>
+  <header class="navbar">
+    <a href="../" class="logo">
+      <svg viewBox="0 0 28 28" fill="none"><rect x="2" y="2" width="24" height="24" rx="6" stroke="%236c63ff" stroke-width="2" /><text x="14" y="20" text-anchor="middle" font-size="16" font-weight="bold" fill="%236c63ff">E</text></svg>
+      <span>Elysium</span>
+    </a>
+    <button class="menu-toggle" aria-label="Toggle menu">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+    </button>
+    <nav>
+      <a href="../guide/">Guide</a>
+      <a href="../ui/">UI</a>
+      <a href="../std/">Std Lib</a>
+      <a href="../spec/">Spec</a>
+      <a href="../packages/" class="active">Packages</a>
+      <a href="../tooling/">Tooling</a>
+      <a href="../recipes/">Recipes</a>
+    </nav>
+  </header>
+
+  <main class="main">
+    <div class="breadcrumbs">
+      <a href="../">Home</a> / <a href="./">Packages</a> / <span>langchain</span>
+    </div>
+
+    <div class="page-header">
+      <h1>langchain <span class="badge">0.1.0</span></h1>
+      <p>Elysium port of <strong><a href="https://github.com/langchain-ai/langchain" target="_blank">LangChain</a></strong> by LangChain Inc — LLM calls, chains, prompts, and tool integration.</p>
+      <div class="hero-actions" style="margin-top: 16px;">
+        <code class="install-cmd">elysium install langchain</code>
+      </div>
+    </div>
+
+    <section class="content-section">
+      <h2>Import</h2>
+      <pre><code>import "#/langchain" as langchain</code></pre>
+    </section>
+
+    <section class="content-section">
+      <h2>API</h2>
+      <div class="api-table">
+        <div class="api-row"><code>llm(model, prompt) -> String</code><span>Call an LLM with a prompt</span></div>
+        <div class="api-row"><code>chat(model, system, message) -> String</code><span>Chat with system prompt and user message</span></div>
+        <div class="api-row"><code>embed(text) -> String</code><span>Get text embeddings</span></div>
+        <div class="api-row"><code>similarity(a, b) -> String</code><span>Compute similarity between two texts</span></div>
+        <div class="api-row"><code>template(templateStr, vars) -> String</code><span>Render a prompt template with variables</span></div>
+        <div class="api-row"><code>rag(query, context) -> String</code><span>Retrieval-augmented generation</span></div>
+        <div class="api-row"><code>summarize(text) -> String</code><span>Summarize text</span></div>
+        <div class="api-row"><code>analyze(text, instruction) -> String</code><span>Analyze text with custom instruction</span></div>
+        <div class="api-row"><code>classify(text, labels) -> String</code><span>Classify text into given labels</span></div>
+        <div class="api-row"><code>translate(text, targetLang) -> String</code><span>Translate text to a target language</span></div>
+        <div class="api-row"><code>agent(model, instructions, query) -> String</code><span>Run an agent with instructions</span></div>
+        <div class="api-row"><code>agentStream(model, instructions, query) -> String</code><span>Run an agent with streaming output</span></div>
+        <div class="api-row"><code>chain(steps, input) -> String</code><span>Execute a chain of steps</span></div>
+        <div class="api-row"><code>extract(text, schema) -> String</code><span>Extract structured data from text</span></div>
+      </div>
+    </section>
+
+    <section class="content-section">
+      <h2>Metadata</h2>
+      <table>
+        <tr><td><strong>Version</strong></td><td>0.1.0</td></tr>
+        <tr><td><strong>License</strong></td><td>MIT</td></tr>
+        <tr><td><strong>Author</strong></td><td>Elysium Team</td></tr>
+        <tr><td><strong>Entry</strong></td><td><code>langchain.ely</code></td></tr>
+        <tr><td><strong>Dependencies</strong></td><td>None</td></tr>
+        <tr><td><strong>Original</strong></td><td><a href="https://github.com/langchain-ai/langchain" target="_blank">langchain-ai/langchain</a> (MIT)</td></tr>
+      </table>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>Built with ❤️ by <a href="https://github.com/imstevetran">Steve Tran</a> &middot; Elysium 2.0 &middot; Open Source on <a href="https://github.com/imstevetran/elysium">GitHub</a></p>
+  </footer>
+</body>
+</html>

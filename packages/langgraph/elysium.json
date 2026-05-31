@@ -1,0 +1,15 @@
+{
+  "name": "langgraph",
+  "version": "0.1.0",
+  "description": "Elysium port of LangGraph (https://github.com/langchain-ai/langgraph) — stateful graph-based agent orchestration",
+  "entry": "langgraph.ely",
+  "license": "MIT",
+  "author": "Elysium Team",
+  "repository": "https://github.com/imstevetran/ellysium-pl",
+  "dependencies": {},
+  "original": {
+    "project": "LangGraph",
+    "url": "https://github.com/langchain-ai/langgraph",
+    "license": "MIT"
+  }
+}

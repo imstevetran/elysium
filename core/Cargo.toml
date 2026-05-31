@@ -1,0 +1,19 @@
+[package]
+name = "elysium"
+version = "0.2.0"
+edition = "2021"
+description = "Elysium 2.0 compiler - a human-friendly, AI-compatible programming language"
+
+[dependencies]
+logos = "0.15"
+inkwell = { version = "0.9", features = ["llvm18-1"] }
+clap = { version = "4", features = ["derive"] }
+codespan-reporting = "0.12"
+termcolor = "1.4"
+serde_json = "1"
+serde = { version = "1", features = ["derive"] }
+semver = "1"
+dirs = "5"
+
+[features]
+default = []

@@ -134,6 +134,56 @@
     "body": "`${0}`",
     "description": "Multi-line backtick string literal"
   },
+  "Extension declaration": {
+    "prefix": "extension",
+    "body": "extension \"${1:name}\" {\n    keyword ${2:keyword_name}\n    runtime ${3:platform}: \"${4:runtime_file.$3}\"\n    $0\n}",
+    "description": "Declare a language extension with keywords and runtimes"
+  },
+  "Extension keyword": {
+    "prefix": "keyword",
+    "body": "keyword ${1:name}",
+    "description": "Declare a keyword within an extension block"
+  },
+  "Switch statement": {
+    "prefix": "switch",
+    "body": "switch ${1:expr} {\n    case ${2:pattern} then ${3:body}\n    $0\n}",
+    "description": "Switch-case statement"
+  },
+  "Render block (.elyx)": {
+    "prefix": "render",
+    "body": "render {\n    <${1:View}>\n        $0\n    </${1:View}>\n}",
+    "description": "XML render block for .elyx components"
+  },
+  "Because annotation": {
+    "prefix": "bc",
+    "body": "bc ${1:\"reason\"}, ${2:condition}",
+    "description": "Because annotation / assertion"
+  },
+  "Only guard": {
+    "prefix": "only",
+    "body": "only ${1:condition}${2:, \"${3:error message}\"}",
+    "description": "Guard clause with optional error message"
+  },
+  "Unsafe block": {
+    "prefix": "unsafe",
+    "body": "unsafe {\n    $0\n}",
+    "description": "Unsafe code block"
+  },
+  "State declaration": {
+    "prefix": "state",
+    "body": "state ${1:name} = ${2:value}",
+    "description": "Declare a mutable state variable"
+  },
+  "Feat block": {
+    "prefix": "feat",
+    "body": "feat \"${1:description}\" {\n    expect ${2:expr}\n    $0\n}",
+    "description": "Feature test block inside spec"
+  },
+  "It block": {
+    "prefix": "it",
+    "body": "it \"${1:description}\" {\n    expect ${2:expr}\n    $0\n}",
+    "description": "Test case inside describe"
+  },
   "Stub function": {
     "prefix": "stub",
     "body": "stub func ${1:name}($2) -> ${3:Int}",

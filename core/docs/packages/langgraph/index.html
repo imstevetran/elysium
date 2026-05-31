@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>langgraph — Elysium Package</title>
+  <meta name="description" content="Elysium LangGraph package — stateful graph-based agent orchestration with state machines, conditional routing, and human-in-the-loop." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../assets/css/style.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>⚡</text></svg>" />
+</head>
+<body>
+  <header class="navbar">
+    <a href="../" class="logo">
+      <svg viewBox="0 0 28 28" fill="none"><rect x="2" y="2" width="24" height="24" rx="6" stroke="%236c63ff" stroke-width="2" /><text x="14" y="20" text-anchor="middle" font-size="16" font-weight="bold" fill="%236c63ff">E</text></svg>
+      <span>Elysium</span>
+    </a>
+    <button class="menu-toggle" aria-label="Toggle menu">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+    </button>
+    <nav>
+      <a href="../guide/">Guide</a>
+      <a href="../ui/">UI</a>
+      <a href="../std/">Std Lib</a>
+      <a href="../spec/">Spec</a>
+      <a href="../packages/" class="active">Packages</a>
+      <a href="../tooling/">Tooling</a>
+      <a href="../recipes/">Recipes</a>
+    </nav>
+  </header>
+
+  <main class="main">
+    <div class="breadcrumbs">
+      <a href="../">Home</a> / <a href="./">Packages</a> / <span>langgraph</span>
+    </div>
+
+    <div class="page-header">
+      <h1>langgraph <span class="badge">0.1.0</span></h1>
+      <p>Elysium port of <strong><a href="https://github.com/langchain-ai/langgraph" target="_blank">LangGraph</a></strong> by LangChain Inc — stateful graph-based agent orchestration.</p>
+      <div class="hero-actions" style="margin-top: 16px;">
+        <code class="install-cmd">elysium install langgraph</code>
+      </div>
+    </div>
+
+    <section class="content-section">
+      <h2>Import</h2>
+      <pre><code>import "#/langgraph" as langgraph</code></pre>
+    </section>
+
+    <section class="content-section">
+      <h2>API</h2>
+      <div class="api-table">
+        <div class="api-row"><code>createRegistry() -> String</code><span>Create a new graph registry</span></div>
+        <div class="api-row"><code>graph(registry, description) -> String</code><span>Create a new state graph</span></div>
+        <div class="api-row"><code>addNode(registry, gid, name, nodeSpec) -> String</code><span>Add a processing node</span></div>
+        <div class="api-row"><code>addEdge(registry, gid, from, to) -> String</code><span>Add a directed edge</span></div>
+        <div class="api-row"><code>addConditionalEdges(registry, gid, from, condition, mapping) -> String</code><span>Add conditional routing</span></div>
+        <div class="api-row"><code>compile(registry, gid) -> String</code><span>Validate graph structure</span></div>
+        <div class="api-row"><code>invoke(registry, gid, initial) -> String</code><span>Run the graph with initial state</span></div>
+        <div class="api-row"><code>stream(registry, gid, initial) -> String</code><span>Execute and stream intermediate states</span></div>
+        <div class="api-row"><code>getState(registry, gid) -> String</code><span>Get current state snapshot</span></div>
+        <div class="api-row"><code>updateState(registry, gid, val) -> String</code><span>Update the graph state</span></div>
+        <div class="api-row"><code>branch(registry, gid, branchSpec) -> String</code><span>Add parallel branching</span></div>
+        <div class="api-row"><code>interrupt(registry, gid, val) -> String</code><span>Pause the graph (human-in-the-loop)</span></div>
+        <div class="api-row"><code>resume(registry, gid) -> String</code><span>Resume the graph from an interrupt</span></div>
+      </div>
+    </section>
+
+    <section class="content-section">
+      <h2>Metadata</h2>
+      <table>
+        <tr><td><strong>Version</strong></td><td>0.1.0</td></tr>
+        <tr><td><strong>License</strong></td><td>MIT</td></tr>
+        <tr><td><strong>Author</strong></td><td>Elysium Team</td></tr>
+        <tr><td><strong>Entry</strong></td><td><code>langgraph.ely</code></td></tr>
+        <tr><td><strong>Dependencies</strong></td><td>None</td></tr>
+        <tr><td><strong>Original</strong></td><td><a href="https://github.com/langchain-ai/langgraph" target="_blank">langchain-ai/langgraph</a> (MIT)</td></tr>
+      </table>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>Built with ❤️ by <a href="https://github.com/imstevetran">Steve Tran</a> &middot; Elysium 2.0 &middot; Open Source on <a href="https://github.com/imstevetran/elysium">GitHub</a></p>
+  </footer>
+</body>
+</html>

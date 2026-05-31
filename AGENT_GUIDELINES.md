@@ -1,7 +1,7 @@
 
 
 ### GitHub Pages Documentation Site (added May 2026)
-- Full documentation site created in `docs/` directory with 28 static HTML pages
+- Full documentation site in `core/docs/` (28+ static HTML pages)
 - **Structure**:
   - `docs/index.html` — Home page with hero, feature grid, hello world, Todo app example
   - `docs/guide/index.html` — Complete language guide (variables, functions, types, control flow, error handling, memory, concurrency, human-centric constructs)
@@ -12,7 +12,12 @@
   - `docs/recipes/index.html` — Recipe hub with 16 cards linking to individual recipe pages
   - 16 individual recipe pages covering: hello-world, functions-imports, console-logging, switch-case, filesystem, http-requests, string-crypto, datetime, regex, async-parallel, spec-testing, benchmarking, classes, stub-env, ui-counter, discount
 - **Styling**: Dark theme inspired by Vercel/modern docs, responsive, with syntax highlighting classes, copy-to-clipboard on code blocks, mobile navigation, intersection-observer animations
-- **To deploy**: Push `docs/` folder to GitHub Pages, enable it in repo settings under `imstevetran/elysium`
+- **Site location**: `core/docs/` (source of truth in this monorepo)
+- **Public URL**: `https://elysiumlang.github.io/` via docs-only mirror repo `elysiumlang/elysiumlang.github.io`
+- **Mirror workflow**: `.github/workflows/docs-mirror.yml` pushes `core/docs` to `elysiumlang/elysiumlang.github.io` on `main` when docs change; needs repo secret `DOCS_DEPLOY_TOKEN` (PAT with `contents: write` on the Pages repo)
+- **Manual mirror**: `./scripts/mirror-docs.sh` (set `DOCS_REPO` if using SSH)
+- **Pages repo setup**: (1) Create org/user `elysiumlang` + empty public repo `elysiumlang.github.io`, (2) Settings → Pages → Deploy from branch `main` / `/ (root)`, (3) Add `DOCS_DEPLOY_TOKEN` to `imstevetran/elysium` secrets, (4) push doc changes to `main` or run workflow manually
+- **This repo does not host Pages** — only mirrors docs outward; language repo stays `imstevetran/elysium`
 - **README updated**: Now points to documentation site, includes full project structure tree
 
 ### VS Code Extension (added May 2026)
@@ -30,13 +35,15 @@
 ### GitHub Actions CI/CD (added May 2026)
 - Two workflows created in `.github/workflows/`:
   - **`ci.yml`**: Runs on push/PR to `main` across ubuntu/macos/windows. Installs LLVM 18 (required by inkwell), builds Rust workspace with `--release`, runs `cargo test`, and validates npm package structure via `npm pack --dry-run`.
+  - **Ubuntu LLVM deps**: `llvm-18-dev` alone is not enough — `llvm-config --libnames --link-static` lists `libPolly.a` but Ubuntu splits it into `libpolly-18-dev`. Without it, `llvm-sys` fails with `could not find native static library Polly`.
+  - **Windows LLVM**: `windows-latest` images preinstall LLVM 20 via Chocolatey; `choco install llvm --version=18.1.0` fails without uninstalling first (`choco uninstall llvm -y` then install 18.1.0).
   - **`release.yml`**: Triggered on `v*` tags. Four jobs:
     1. **build-binaries**: Matrix across ubuntu (linux x64), macos (arm64), windows (x64). Installs LLVM 18, runs `node scripts/build-binaries.js`, uploads gzipped binaries as artifacts.
     2. **create-release**: Downloads all binary artifacts and creates a GitHub Release with `softprops/action-gh-release`, attaching all `.gz` files and generating release notes.
     3. **publish-npm**: Uses npm Trusted Publishing (OIDC) with `id-token: write` permission. No `NPM_TOKEN` needed -- npm CLI >= 11.5.1 auto-detects OIDC. Publishes from `npm-package/` with automatic provenance attestation.
-    4. **deploy-pages**: Uploads the `docs/` directory via `actions/upload-pages-artifact` and deploys with `actions/deploy-pages`.
+    4. **docs mirror** (separate workflow `docs-mirror.yml`): pushes `core/docs` to `elysiumlang/elysiumlang.github.io` when docs change on `main`
 - **User setup needed**:
-  1. GitHub Pages: Settings -> Pages -> Source -> GitHub Actions
+  1. Docs mirror: create `elysiumlang/elysiumlang.github.io`, enable Pages from `main`, add `DOCS_DEPLOY_TOKEN` secret on this repo
   2. npm Trusted Publisher: npmjs.com/package/elysium-lang/settings -> Trusted Publisher -> GitHub Actions: `imstevetran/elysium`, workflow `release.yml`, allow `npm publish`
   3. (Optional) Package settings -> Publishing access -> "Require two-factor authentication and disallow tokens"
 
@@ -52,7 +59,7 @@
   1. Builds native binaries for Linux x64, macOS ARM64, and Windows x64
   2. Creates a GitHub Release with those binaries attached + auto-generated release notes
   3. Publishes `elysium-lang@<version>` to npm via Trusted Publishing (OIDC) with provenance attestation
-  4. Deploys the docs site to GitHub Pages
+  4. (Docs deploy separately via `docs-mirror.yml` when `core/docs` changes on `main`)
 - The release workflow triggers on tags matching `v*`. The tag must be an annotated/lightweight tag pushed to the remote.
 - Version must follow semver (`<major>.<minor>.<patch>`). The script validates this.
 - The script requires a clean working tree (no uncommitted changes).
@@ -125,16 +132,16 @@
 ### `elysium test` Command (added May 2026)
 - New CLI subcommand `elysium test [path]` — runs spec-driven tests
 - Usage:
-  - `elysium test` — scans `tests/` directory for `.ely` files with `spec` blocks
-  - `elysium test tests/test_simple.ely` — runs a single file
-  - `elysium test tests/ --dry-run` — lists specs and feats without type-checking
+  - `elysium test` — scans `core/examples/` directory for `.ely` files with `spec` blocks
+  - `elysium test core/examples/spec_simple.ely` — runs a single file
+  - `elysium test core/examples/ --dry-run` — lists specs and feats without type-checking
   - `elysium test --env test` — use the "test" environment for stub filtering (default: "test")
 - **Design**: Elysium's `spec`/`feat`/`expect` are compile-time constructs. `expect <expr>` validates that `<expr>` is well-typed. There is no runtime execution — if type-checking passes, all specs pass.
 - **Implementation** (3 files): `src/cli.rs` — `Test` command with `path`, `--dry-run`, `--env` options; `src/test_runner.rs` — `run_tests_in_file()` and `list_tests()` functions; `src/main.rs` — `cmd_test()` dispatch with import resolution, stub filtering, and summary output
 - Output format: per-file header, spec/tests count, checkmarks for each passing spec/feat, summary line
 - When type-checking fails, the error is printed and the file is marked as failed
 - Exit code is non-zero if any file has failures
-- Currently validates 29 tests across 3 files: `test_simple.ely` (3), `test_langchain.ely` (14), `test_langgraph.ely` (12)
+- Currently has spec examples in `core/examples/spec_simple.ely`, `core/examples/spec_example.ely`
 
 ### Schedule (Cron) Keyword for Background Functions (added May 2026)
 - New `schedule "expr" func name() { ... }` syntax for running functions on a timer in the background
@@ -374,3 +381,9 @@
 - JSON serde is `#[serde(default)]` everywhere so existing projects without `ui`/`ssr` fields continue to work
 - Example `elysium.json` updated with both `ui` and `ssr` sections
 - Documented in SKILL.md (Project Configuration section) and examples.md (example 19)
+
+## All builtins emit LLVM `printf` stubs (removed May 31, 2026)
+- The original `core/src/runtime/runtime.c` was deleted — it was entirely dead code.
+- **Every** builtin (env, json, http, math, dict, auth, worker, is) emits `printf("[xxx] method: use JS runtime\n")` in LLVM IR codegen.
+- Only standard C library functions (`time`, `fopen`, `printf`, `curl` via popen, etc.) are called directly from LLVM IR — no `__ely_*` wrappers.
+- Native C runtime code only lives in extension directories (`extensions/*/runtime/*.c`) where `extension` keyword declares platform-specific runtimes.

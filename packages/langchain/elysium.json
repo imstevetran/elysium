@@ -1,0 +1,15 @@
+{
+  "name": "langchain",
+  "version": "0.1.0",
+  "description": "Elysium port of LangChain (https://github.com/langchain-ai/langchain) — LLM calls, chains, prompts, and tool integration",
+  "entry": "langchain.ely",
+  "license": "MIT",
+  "author": "Elysium Team",
+  "repository": "https://github.com/imstevetran/ellysium-pl",
+  "dependencies": {},
+  "original": {
+    "project": "LangChain",
+    "url": "https://github.com/langchain-ai/langchain",
+    "license": "MIT"
+  }
+}

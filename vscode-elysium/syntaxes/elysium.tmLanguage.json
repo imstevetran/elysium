@@ -120,7 +120,7 @@
         },
         {
           "name": "keyword.declaration.elysium",
-          "match": "\\b(?:let|var|func|class|init|enum|component|state|render|import|as|typealias|private|lazy|stub|worker|schedule)\\b"
+          "match": "\\b(?:let|var|func|class|init|enum|component|state|render|import|as|typealias|private|lazy|stub|worker|schedule|extension)\\b"
         },
         {
           "name": "keyword.other.elysium",
@@ -134,7 +134,7 @@
     },
     "builtins": {
       "name": "support.function.builtin.elysium",
-      "match": "\\b(?:print|sum|min|max|abs|len|count|isEmpty|map|filter|reduce|toString|toInt|toFloat|toBool|typeName|parseInt|parseFloat)\\b"
+      "match": "\\b(?:print|console|fs|transport|string|regex|datetime|math|dict|json|env|http|worker)\\b"
     },
     "function-definition": {
       "name": "meta.function.elysium",

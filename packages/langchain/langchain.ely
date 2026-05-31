@@ -1,0 +1,296 @@
+/// Summary: LangChain-style AI operations, pure Elysium.
+/// Port of LangChain (https://github.com/langchain-ai/langchain) by LangChain Inc.
+/// Uses Elysium builtins (dict, json, math, http, env) instead of transport.post() URL hacks.
+/// Supports both OpenAI and local/Ollama models via OPENAI_BASE_URL env var.
+/// All functions return String results (JSON-encoded where applicable).
+///
+/// Environment variables:
+///   OPENAI_BASE_URL  — API base URL (default: http://localhost:11434/v1)
+///   OPENAI_API_KEY   — API key (optional for local models, required for OpenAI)
+///   LLM_MODEL        — Default model name (default: qwen3.5:2b)
+
+/// Get the API base URL from environment (default: local Ollama).
+func baseUrl() -> String {
+    let url = env.get("OPENAI_BASE_URL")
+    if url == "" {
+        "http://localhost:11434/v1"
+    } else {
+        url
+    }
+}
+
+/// Get the default model from environment.
+func defaultModel() -> String {
+    let model = env.get("LLM_MODEL")
+    if model == "" {
+        "qwen3.5:2b"
+    } else {
+        model
+    }
+}
+
+/// Get API key from environment (empty string = no auth = local model).
+func apiKey() -> String {
+    let key = env.get("OPENAI_API_KEY")
+    if key == "" {
+        env.get("OPENAI_KEY")
+    } else {
+        key
+    }
+}
+
+/// Build headers. For local models (no key), only Content-Type. For remote, add Authorization.
+func buildHeaders(key: String) -> String {
+    if key == "" {
+        json.buildObject("Content-Type", "application/json")
+    } else {
+        json.buildObject("Content-Type", "application/json", "Authorization", "Bearer " + key)
+    }
+}
+
+/// Parse the HTTP response wrapper and extract the LLM content from choices[0].message.content.
+/// http.request returns: {"status":200,"body":"{\"choices\":[...]}","headers":{...}}
+func extractContent(respRaw: String) -> String {
+    let wrapper = json.parse(respRaw)
+    let bodyStr = json.get(wrapper, "body")
+    if bodyStr == "" {
+        json.free(wrapper)
+        ""
+    } else {
+        let bodyParsed = json.parse(bodyStr)
+        let content = json.get(bodyParsed, "choices.0.message.content")
+        json.free(bodyParsed)
+        json.free(wrapper)
+        if content == "" {
+            ""
+        } else {
+            content
+        }
+    }
+}
+
+/// Make an LLM API call and extract the response content.
+func callLLM(model: String, messagesJson: String, key: String) -> String {
+    let url = baseUrl() + "/chat/completions"
+    let body = json.buildObject("model", model, "messages", messagesJson, "temperature", "0.7", "max_tokens", "1024")
+    let headers = buildHeaders(key)
+    let respHandle = http.request("POST", url, headers, body)
+    let content = extractContent(respHandle)
+    if content == "" {
+        "[langchain error: empty response]"
+    } else {
+        content
+    }
+}
+
+/// Perform a simple LLM completion.
+func llm(model: String, prompt: String) -> String {
+    let key = apiKey()
+    let m = if model == "" then defaultModel() else model
+    let messages = json.buildArray(json.buildMessage("user", prompt))
+    callLLM(m, messages, key)
+}
+
+/// Single chat turn with system prompt.
+func chat(model: String, system: String, message: String) -> String {
+    let key = apiKey()
+    let m = if model == "" then defaultModel() else model
+    let messages = json.buildArray(json.buildMessage("system", system), json.buildMessage("user", message))
+    callLLM(m, messages, key)
+}
+
+/// Generate text embeddings.
+func embed(text: String) -> String {
+    let key = apiKey()
+    if key == "" {
+        "[0.0, 0.0, 0.0, 0.0]"
+    } else {
+        let url = baseUrl() + "/embeddings"
+        let body = json.buildObject("model", "text-embedding-3-small", "input", text)
+        let headers = buildHeaders(key)
+        let respHandle = http.request("POST", url, headers, body)
+        let wrapper = json.parse(respHandle)
+        let bodyStr = json.get(wrapper, "body")
+        if bodyStr == "" {
+            json.free(wrapper)
+            "[0.0, 0.0, 0.0, 0.0]"
+        } else {
+            let bodyParsed = json.parse(bodyStr)
+            let embedding = json.get(bodyParsed, "data.0.embedding")
+            json.free(bodyParsed)
+            json.free(wrapper)
+            if embedding == "" {
+                "[0.0, 0.0, 0.0, 0.0]"
+            } else {
+                embedding
+            }
+        }
+    }
+}
+
+/// Compute cosine similarity between two embedding vectors.
+func similarity(a: String, b: String) -> String {
+    math.cosineSimilarity(a, b)
+}
+
+/// Fill a prompt template.
+func template(templateStr: String, vars: String) -> String {
+    templateStr + " (with vars: " + vars + ")"
+}
+
+/// Answer a query using provided context (Retrieval-Augmented Generation).
+func rag(query: String, context: String) -> String {
+    let key = apiKey()
+    let model = defaultModel()
+    let systemMsg = "You are a helpful assistant. Answer the user question based on the provided context. If the context does not contain enough information, say so."
+    let userMsg = "Context:\n" + context + "\n\nQuestion: " + query
+    let messages = json.buildArray(json.buildMessage("system", systemMsg), json.buildMessage("user", userMsg))
+    callLLM(model, messages, key)
+}
+
+/// Summarize text.
+func summarize(text: String) -> String {
+    let key = apiKey()
+    let model = defaultModel()
+    let systemMsg = "You are an expert summarizer. Provide a concise summary."
+    let userMsg = "Please summarize:\n\n" + text
+    let messages = json.buildArray(json.buildMessage("system", systemMsg), json.buildMessage("user", userMsg))
+    callLLM(model, messages, key)
+}
+
+/// Analyze text with custom instruction.
+func analyze(text: String, instruction: String) -> String {
+    let key = apiKey()
+    let model = defaultModel()
+    let messages = json.buildArray(json.buildMessage("system", instruction), json.buildMessage("user", text))
+    callLLM(model, messages, key)
+}
+
+/// Classify text into given labels (comma-separated).
+func classify(text: String, labels: String) -> String {
+    let key = apiKey()
+    let model = defaultModel()
+    let systemMsg = "Classify the user input into exactly one of these categories: " + labels + ". Respond with ONLY the category name."
+    let messages = json.buildArray(json.buildMessage("system", systemMsg), json.buildMessage("user", text))
+    callLLM(model, messages, key)
+}
+
+/// Translate text to a target language.
+func translate(text: String, targetLang: String) -> String {
+    let key = apiKey()
+    let model = defaultModel()
+    let systemMsg = "You are a professional translator. Translate the user text to " + targetLang + ". Respond with ONLY the translated text."
+    let messages = json.buildArray(json.buildMessage("system", systemMsg), json.buildMessage("user", text))
+    callLLM(model, messages, key)
+}
+
+/// Run an agent with instructions.
+func agent(model: String, instructions: String, query: String) -> String {
+    let key = apiKey()
+    let m = if model == "" then defaultModel() else model
+    let messages = json.buildArray(json.buildMessage("system", instructions), json.buildMessage("user", query))
+    callLLM(m, messages, key)
+}
+
+/// Streaming agent (returns final result).
+func agentStream(model: String, instructions: String, query: String) -> String {
+    agent(model, instructions, query)
+}
+
+/// Run a chain of steps.
+func chain(steps: String, input: String) -> String {
+    let key = apiKey()
+    let model = defaultModel()
+    let systemMsg = "You are a step in a processing chain. Perform: " + steps
+    let messages = json.buildArray(json.buildMessage("system", systemMsg), json.buildMessage("user", input))
+    callLLM(model, messages, key)
+}
+
+/// Extract structured data from text per a schema.
+func extract(text: String, schema: String) -> String {
+    let key = apiKey()
+    let model = defaultModel()
+    let systemMsg = "Extract structured data from the user text according to this schema: " + schema + ". Respond with ONLY valid JSON."
+    let messages = json.buildArray(json.buildMessage("system", systemMsg), json.buildMessage("user", text))
+    callLLM(model, messages, key)
+}
+
+/// Create a new tool registry dictionary. Returns a handle.
+func createTools() -> String {
+    dict.create()
+}
+
+/// Register a tool by name.
+func tool(toolsHandle: String, name: String, description: String, code: String) -> String {
+    dict.set(toolsHandle, name, code)
+    ""
+}
+
+/// Get the list of registered tool names as a JSON array string.
+func listTools(toolsHandle: String) -> String {
+    dict.keys(toolsHandle)
+}
+
+/// Get a tool code by name.
+func getTool(toolsHandle: String, name: String) -> String {
+    dict.get(toolsHandle, name)
+}
+
+spec "LangChain" {
+    feat "llm returns String" {
+        let result = llm("gpt-4o-mini", "What is the capital of France?")
+        expect result
+    }
+    feat "chat returns String" {
+        let result = chat("gpt-4o", "You are a helpful assistant.", "Tell me a joke.")
+        expect result
+    }
+    feat "embed returns String" {
+        let result = embed("Elysium programming language")
+        expect result
+    }
+    feat "template returns String" {
+        let result = template("Hello {name}!", "plain text vars")
+        expect result
+    }
+    feat "rag returns String" {
+        let result = rag("What is Elysium?", "Elysium is a programming language.")
+        expect result
+    }
+    feat "summarize returns String" {
+        let result = summarize("A modern programming language with AI-native features.")
+        expect result
+    }
+    feat "analyze returns String" {
+        let result = analyze("I love this language!", "Determine sentiment.")
+        expect result
+    }
+    feat "classify returns String" {
+        let result = classify("Buy now! Limited offer!", "spam, promotional, informational")
+        expect result
+    }
+    feat "translate returns String" {
+        let result = translate("Hello, how are you?", "Spanish")
+        expect result
+    }
+    feat "similarity returns String" {
+        let result = similarity("[0.1, 0.2, 0.3]", "[0.4, 0.5, 0.6]")
+        expect result
+    }
+    feat "agent returns String" {
+        let result = agent("gpt-4o", "You are a helpful assistant.", "Solve this.")
+        expect result
+    }
+    feat "agentStream returns String" {
+        let result = agentStream("gpt-4o", "You are helpful.", "Stream this.")
+        expect result
+    }
+    feat "chain returns String" {
+        let result = chain("step1, step2", "initial input")
+        expect result
+    }
+    feat "extract returns String" {
+        let result = extract("John is 30 years old.", "name: string, age: int")
+        expect result
+    }
+}

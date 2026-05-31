@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>UI Guide — Elysium 2.0</title>
+  <meta name="description" content="Elysium 2.0 declarative UI layer — components, state, reactive rendering, two-way binding, and built-in views." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../assets/css/style.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>⚡</text></svg>" />
+</head>
+<body>
+  <header class="navbar">
+    <a href="../" class="logo">
+      <svg viewBox="0 0 28 28" fill="none"><rect x="2" y="2" width="24" height="24" rx="6" stroke="%236c63ff" stroke-width="2" /><text x="14" y="20" text-anchor="middle" font-size="16" font-weight="bold" fill="%236c63ff">E</text></svg>
+      <span>Elysium</span>
+    </a>
+    <button class="menu-toggle" aria-label="Toggle menu">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+    </button>
+    <nav>
+      <a href="../guide/">Guide</a>
+      <a href="../ui/" class="active">UI</a>
+      <a href="../std/">Std Lib</a>
+      <a href="../spec/">Spec</a>
+      <a href="../packages/">Packages</a>
+      <a href="../tooling/">Tooling</a>
+      <a href="../recipes/">Recipes</a>
+    </nav>
+  </header>
+
+  <main class="main">
+    <div class="breadcrumbs">
+      <a href="../">Home</a> / <span>UI Guide</span>
+    </div>
+
+    <div class="page-header">
+      <h1>Declarative UI Layer</h1>
+      <p>Build reactive, component-based user interfaces with Elysium's built-in UI framework. No external libraries needed.</p>
+    </div>
+
+    <div class="info-box info-tip" style="margin: 24px 0;">
+      <strong>Two file formats:</strong> Use <code>.elyx</code> for <strong>XML-syntax components</strong> (TSX-style <code>render {}</code> block) and <code>.ely</code> for <strong>plain Elysium view syntax</strong> (function-call style). Both produce the same component semantics — it's purely a surface syntax choice.
+    </div>
+
+    <section id="elyx-format" class="content-section animate-on-scroll">
+      <h2>What is <code>.elyx</code>?</h2>
+      <p><code>.elyx</code> is a TSX-like file format for Elysium UI components. An <code>.elyx</code> file contains exactly one <code>component</code> declaration with an optional <code>render { … }</code> block that uses XML syntax for the view tree.</p>
+
+      <h3>Basic Structure</h3>
+<pre><code><span class="hl-comment">/// Summary: Counter component.</span>
+<span class="hl-kw">component</span> <span class="hl-type">Counter</span> {
+    <span class="hl-kw">state</span> count = <span class="hl-num">0</span>
+
+    <span class="hl-kw">render</span> {
+        <span class="hl-type">&lt;Column&gt;</span>
+            <span class="hl-type">&lt;Text&gt;</span>Count: {count}<span class="hl-type">&lt;/Text&gt;</span>
+            <span class="hl-type">&lt;Button</span> label=<span class="hl-str">"Increment"</span> onClick={count = count + <span class="hl-num">1</span>} <span class="hl-type">/&gt;</span>
+        <span class="hl-type">&lt;/Column&gt;</span>
+    }
+}</code></pre>
+
+      <h3>How It Works</h3>
+      <p>The <code>render { … }</code> block is <strong>desugared</strong> at compile time into standard Elysium view-tree construction calls. The component body (state declarations, methods, properties) is regular Elysium code — only the <code>render</code> block uses XML syntax.</p>
+
+      <h3>XML Syntax Rules</h3>
+      <table>
+        <tr><th>Feature</th><th>Syntax</th><th>Example</th></tr>
+        <tr><td>Element</td><td><code>&lt;TagName&gt; … &lt;/TagName&gt;</code></td><td><code>&lt;Text&gt;Hello&lt;/Text&gt;</code></td></tr>
+        <tr><td>Self-closing</td><td><code>&lt;TagName … /&gt;</code></td><td><code>&lt;Image src="logo.png" /&gt;</code></td></tr>
+        <tr><td>String attribute</td><td><code>name="value"</code></td><td><code>label="Click me"</code></td></tr>
+        <tr><td>Expression attribute</td><td><code>name={code}</code></td><td><code>onClick={count = count + 1}</code></td></tr>
+        <tr><td>Binding attribute</td><td><code>name = var</code></td><td><code>value = newTask</code> (two-way bind)</td></tr>
+        <tr><td>Text child</td><td>Raw text inside an element</td><td><code>&lt;Text&gt;Hello&lt;/Text&gt;</code></td></tr>
+        <tr><td>Expression child</td><td><code>{expr}</code> inside an element</td><td><code>&lt;Text&gt;Count: {count}&lt;/Text&gt;</code></td></tr>
+        <tr><td>Fragment</td><td>Multiple adjacent elements without a wrapper</td><td><code>&lt;A /&gt; &lt;B /&gt;</code> — auto-wrapped</td></tr>
+      </table>
+
+      <h3><code>.elyx</code> vs <code>.ely</code> Component Syntax</h3>
+      <p>The same component written in both formats:</p>
+
+<pre><code><span class="hl-comment">// .elyx — XML render block</span>
+<span class="hl-kw">component</span> <span class="hl-type">Counter</span> {
+    <span class="hl-kw">state</span> count = <span class="hl-num">0</span>
+    <span class="hl-kw">render</span> {
+        <span class="hl-type">&lt;Column&gt;</span>
+            <span class="hl-type">&lt;Text&gt;</span>Count: {count}<span class="hl-type">&lt;/Text&gt;</span>
+            <span class="hl-type">&lt;Button</span> label=<span class="hl-str">"Increment"</span> onClick={count = count + <span class="hl-num">1</span>} <span class="hl-type">/&gt;</span>
+        <span class="hl-type">&lt;/Column&gt;</span>
+    }
+}</code></pre>
+
+<pre><code><span class="hl-comment">// .ely — function-call view syntax</span>
+<span class="hl-kw">component</span> <span class="hl-type">Counter</span> {
+    <span class="hl-kw">state</span> count = <span class="hl-num">0</span>
+
+    <span class="hl-type">Column</span> {
+        <span class="hl-type">Text</span>(<span class="hl-str">"Count: "</span>, count)
+        <span class="hl-type">Button</span>(label: <span class="hl-str">"Increment"</span>) onClick {
+            count = count + <span class="hl-num">1</span>
+        }
+    }
+}</code></pre>
+    </section>
+
+    <div class="toc">
+      <div class="toc-title">Table of Contents</div>
+      <ol class="toc-list">
+        <li><a href="#elyx-format">What is .elyx?</a></li>
+        <li><a href="#core">Core Concepts</a></li>
+        <li><a href="#component-syntax">Component Syntax</a></li>
+        <li><a href="#state">State</a></li>
+        <li><a href="#conditional">Conditional Rendering</a></li>
+        <li><a href="#guards">Guards with <code>only</code></a></li>
+        <li><a href="#lists">Lists &amp; Spread</a></li>
+        <li><a href="#binding">Two-Way Binding</a></li>
+        <li><a href="#events">Event Handlers</a></li>
+        <li><a href="#styling">Styling</a></li>
+        <li><a href="#views">Built-in Views</a></li>
+        <li><a href="#todo">Full Example: Todo App</a></li>
+      </ol>
+    </div>
+
+    <section id="core" class="content-section animate-on-scroll">
+      <h2>Core Concepts</h2>
+      <ol>
+        <li><strong>Component = Function that returns a View</strong> — Components describe a tree of views. They are automatically reactive.</li>
+        <li><strong>State</strong> — Declare mutable, observable variables with <code>state</code>. Any view reading a state variable re-renders when it changes.</li>
+        <li><strong>Views are immutable descriptions</strong> — No direct DOM manipulation. The runtime diffs and updates the actual UI.</li>
+        <li><strong>Event handlers</strong> — Attached as closures to views.</li>
+      </ol>
+
+      <div class="info-box info-tip">
+        <strong>Philosophy:</strong> The UI layer is part of the language's standard library — not a framework bolted on. First-class syntax for views, state, and events with zero boilerplate.
+      </div>
+    </section>
+
+    <section id="component-syntax" class="content-section animate-on-scroll">
+      <h2>Component Syntax</h2>
+<pre><code><span class="hl-kw">component</span> <span class="hl-type">Name</span> {
+    <span class="hl-kw">state</span> varName = initialValue
+
+    <span class="hl-comment">// View tree</span>
+    <span class="hl-type">ViewType</span> { ... }
+}</code></pre>
+    </section>
+
+    <section id="state" class="content-section animate-on-scroll">
+      <h2>State</h2>
+      <p>Use <code>state</code> to declare mutable, observable variables. Views that read a state variable automatically re-render when it changes.</p>
+
+<pre><code><span class="hl-comment">/// Summary: Counter with increment button.</span>
+<span class="hl-kw">component</span> <span class="hl-type">Counter</span> {
+    <span class="hl-kw">state</span> count = <span class="hl-num">0</span> <span class="hl-kw">bc</span> <span class="hl-str">"current counter value"</span>
+
+    <span class="hl-type">Column</span> {
+        <span class="hl-type">Text</span>(<span class="hl-str">"Count: "</span>, count)
+        <span class="hl-type">Button</span>(label: <span class="hl-str">"Increment"</span>) onClick {
+            count = count + <span class="hl-num">1</span>
+        }
+    }
+}</code></pre>
+    </section>
+
+    <section id="conditional" class="content-section animate-on-scroll">
+      <h2>Conditional Rendering</h2>
+      <p>Use <code>if … then</code> directly inside the view tree.</p>
+<pre><code><span class="hl-kw">component</span> <span class="hl-type">Greeting</span> {
+    <span class="hl-kw">state</span> isLoggedIn = <span class="hl-num">true</span>
+
+    <span class="hl-type">Column</span> {
+        <span class="hl-kw">if</span> isLoggedIn <span class="hl-kw">then</span>
+            <span class="hl-type">Text</span>(<span class="hl-str">"Welcome back!"</span>)
+        <span class="hl-kw">else</span>
+            <span class="hl-type">Button</span>(label: <span class="hl-str">"Login"</span>) {
+                isLoggedIn = <span class="hl-num">true</span>
+            }
+    }
+}</code></pre>
+    </section>
+
+    <section id="guards" class="content-section animate-on-scroll">
+      <h2>Guards with <code>only</code></h2>
+<pre><code><span class="hl-kw">component</span> <span class="hl-type">SecureContent</span> {
+    <span class="hl-kw">state</span> userRole = <span class="hl-str">"admin"</span>
+
+    <span class="hl-kw">only</span> userRole == <span class="hl-str">"admin"</span> <span class="hl-kw">do</span> {
+        <span class="hl-type">Text</span>(<span class="hl-str">"Top secret data"</span>)
+    }
+}</code></pre>
+    </section>
+
+    <section id="lists" class="content-section animate-on-scroll">
+      <h2>Lists &amp; Spread</h2>
+      <p>Use the <code>…</code> ellipsis operator to spread lists of views.</p>
+<pre><code><span class="hl-comment">/// Summary: Display a list of items.</span>
+<span class="hl-kw">component</span> <span class="hl-type">ItemList</span>(items: [<span class="hl-type">String</span>]) {
+    <span class="hl-type">Column</span> {
+        <span class="hl-op">…</span>items.map(item =&gt;
+            <span class="hl-type">Row</span> {
+                <span class="hl-type">Checkbox</span>(checked: <span class="hl-num">false</span>)
+                <span class="hl-type">Text</span>(item)
+            }
+        )
+    }
+}</code></pre>
+    </section>
+
+    <section id="binding" class="content-section animate-on-scroll">
+      <h2>Two-Way Binding</h2>
+      <p>Use <code>=</code> for binding between a UI input and state variable. Changes to the input automatically update the state.</p>
+<pre><code><span class="hl-kw">component</span> <span class="hl-type">NameEditor</span> {
+    <span class="hl-kw">state</span> name = <span class="hl-str">"Alice"</span>
+
+    <span class="hl-type">Column</span> {
+        <span class="hl-type">Text</span>(<span class="hl-str">"Your name:"</span>)
+        <span class="hl-type">TextField</span>(value = name)
+        <span class="hl-type">Text</span>(<span class="hl-str">"Hello, "</span>, name)
+    }
+}</code></pre>
+    </section>
+
+    <section id="events" class="content-section animate-on-scroll">
+      <h2>Event Handlers</h2>
+      <p>Attach closures to view events via attributes like <code>onClick</code>. Inside a handler you can mutate state, call functions, or use <code>bc</code> assertions for validation.</p>
+      <p>The <code>bc</code> keyword is a general-purpose assertion — it works anywhere, not just in handlers. See the <a href="../guide/#bc">Language Guide</a> for details.</p>
+<pre><code><span class="hl-kw">component</span> <span class="hl-type">SubmitButton</span> {
+    <span class="hl-type">Button</span>(label: <span class="hl-str">"Submit"</span>) onClick {
+        <span class="hl-kw">bc</span> isValidForm(), <span class="hl-str">"Form must be valid before submitting"</span>
+        submitData()
+    }
+}</code></pre>
+    </section>
+
+    <section id="styling" class="content-section animate-on-scroll">
+      <h2>Styling</h2>
+      <p>Views accept an optional <code>style</code> attribute — a plain dictionary of style properties.</p>
+<pre><code><span class="hl-type">Text</span>(<span class="hl-str">"Important"</span>) <span class="hl-kw">style</span> {
+    color: <span class="hl-str">"red"</span>,
+    fontSize: <span class="hl-num">24</span>,
+    bold: <span class="hl-num">true</span>
+}</code></pre>
+    </section>
+
+    <section id="views" class="content-section animate-on-scroll">
+      <h2>Built-in Views</h2>
+      <table>
+        <tr><th>View</th><th>Description</th><th>Common Attributes</th></tr>
+        <tr><td><code>Text</code></td><td>Simple text label</td><td><code>content</code>, <code>style</code></td></tr>
+        <tr><td><code>Button</code></td><td>Clickable button</td><td><code>label</code>, <code>onClick</code></td></tr>
+        <tr><td><code>TextField</code></td><td>Text input</td><td><code>value</code> (two-way), <code>onChange</code></td></tr>
+        <tr><td><code>Image</code></td><td>Image display</td><td><code>src</code>, <code>width</code>, <code>height</code></td></tr>
+        <tr><td><code>Column</code></td><td>Vertical stack layout</td><td>children views</td></tr>
+        <tr><td><code>Row</code></td><td>Horizontal stack layout</td><td>children views</td></tr>
+        <tr><td><code>ScrollView</code></td><td>Scrollable container</td><td><code>axis</code> (vertical/horizontal)</td></tr>
+        <tr><td><code>ListView</code></td><td>Virtualised scrollable list</td><td><code>items</code>, <code>renderItem</code></td></tr>
+      </table>
+    </section>
+
+    <section id="todo" class="content-section animate-on-scroll">
+      <h2>Full Example: Todo App</h2>
+      <p>A complete, production-style todo application combining all UI features. Shown here in both <code>.elyx</code> (XML) and <code>.ely</code> (function-call) syntax.</p>
+
+      <h3><code>.elyx</code> — XML render block</h3>
+<div class="code-header"><span>TodoApp.elyx</span></div>
+<pre><code><span class="hl-comment">/// Summary: A simple todo list application.</span>
+<span class="hl-kw">component</span> <span class="hl-type">TodoApp</span> {
+    <span class="hl-kw">state</span> tasks = [<span class="hl-type">String</span>]()
+    <span class="hl-kw">state</span> newTask = <span class="hl-str">""</span>
+
+    <span class="hl-kw">render</span> {
+        <span class="hl-type">&lt;Column</span> padding=<span class="hl-str">"20"</span><span class="hl-type">&gt;</span>
+            <span class="hl-type">&lt;Text</span> style={{ fontSize: <span class="hl-num">24</span>, bold: <span class="hl-num">true</span> }}<span class="hl-type">&gt;</span>My Todos<span class="hl-type">&lt;/Text&gt;</span>
+
+            <span class="hl-type">&lt;Row&gt;</span>
+                <span class="hl-type">&lt;TextField</span> value={newTask} placeholder=<span class="hl-str">"Add a task"</span> <span class="hl-type">/&gt;</span>
+                <span class="hl-type">&lt;Button</span> label=<span class="hl-str">"Add"</span> onClick={ <span class="hl-kw">only</span> newTask.trim() != <span class="hl-str">""</span>; tasks = tasks + [newTask]; newTask = <span class="hl-str">""</span> } <span class="hl-type">/&gt;</span>
+            <span class="hl-type">&lt;/Row&gt;</span>
+
+            <span class="hl-kw">if</span> tasks.isEmpty <span class="hl-kw">then</span>
+                <span class="hl-type">&lt;Text</span> style={{ color: <span class="hl-str">"gray"</span> }}<span class="hl-type">&gt;</span>No tasks yet!<span class="hl-type">&lt;/Text&gt;</span>
+            <span class="hl-kw">else</span>
+                <span class="hl-type">&lt;Column&gt;</span>
+                    <span class="hl-op">…</span>{tasks.map((task, index) =&gt;
+                        <span class="hl-type">&lt;Row&gt;</span>
+                            <span class="hl-type">&lt;Text&gt;</span>{task}<span class="hl-type">&lt;/Text&gt;</span>
+                            <span class="hl-type">&lt;Button</span> label=<span class="hl-str">"Delete"</span> onClick={ tasks = tasks.filter((_, i) =&gt; i != index) } <span class="hl-type">/&gt;</span>
+                        <span class="hl-type">&lt;/Row&gt;</span>
+                    )}
+                <span class="hl-type">&lt;/Column&gt;</span>
+        <span class="hl-type">&lt;/Column&gt;</span>
+    }
+}</code></pre>
+
+      <h3><code>.ely</code> — function-call view syntax</h3>
+<pre><code><span class="hl-comment">/// Summary: A simple todo list application.</span>
+<span class="hl-kw">component</span> <span class="hl-type">TodoApp</span> {
+    <span class="hl-kw">state</span> tasks = [<span class="hl-type">String</span>]()
+    <span class="hl-kw">state</span> newTask = <span class="hl-str">""</span>
+
+    <span class="hl-type">Column</span> padding: <span class="hl-num">20</span> {
+        <span class="hl-type">Text</span>(<span class="hl-str">"My Todos"</span>) <span class="hl-kw">style</span> { fontSize: <span class="hl-num">24</span>, bold: <span class="hl-num">true</span> }
+
+        <span class="hl-type">Row</span> {
+            <span class="hl-type">TextField</span>(value = newTask) placeholder <span class="hl-str">"Add a task"</span>
+            <span class="hl-type">Button</span>(label: <span class="hl-str">"Add"</span>) onClick {
+                <span class="hl-kw">only</span> newTask.trim() != <span class="hl-str">""</span>, <span class="hl-str">"Task cannot be empty"</span>
+                tasks = tasks + [newTask]
+                newTask = <span class="hl-str">""</span>
+            }
+        }
+
+        <span class="hl-kw">if</span> tasks.isEmpty <span class="hl-kw">then</span>
+            <span class="hl-type">Text</span>(<span class="hl-str">"No tasks yet!"</span>) <span class="hl-kw">style</span> { color: <span class="hl-str">"gray"</span> }
+        <span class="hl-kw">else</span>
+            <span class="hl-type">Column</span> {
+                <span class="hl-op">…</span>tasks.map((task, index) =&gt;
+                    <span class="hl-type">Row</span> {
+                        <span class="hl-type">Text</span>(task)
+                        <span class="hl-type">Button</span>(label: <span class="hl-str">"Delete"</span>) onClick {
+                            tasks = tasks.filter((_, i) =&gt; i != index)
+                        }
+                    }
+                )
+            }
+    }
+}</code></pre>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>Elysium 2.0 &middot; <a href="https://github.com/imstevetran/elysium">GitHub</a></p>
+  </footer>
+  <script src="../assets/js/main.js"></script>
+</body>
+</html>

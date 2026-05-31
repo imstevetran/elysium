@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Async &amp; Parallel — Elysium Recipes</title>
+  <meta name="description" content="Concurrent execution with async/await and parallel blocks in Elysium." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../assets/css/style.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>⚡</text></svg>" />
+</head>
+<body>
+  <header class="navbar">
+    <a href="../" class="logo"><svg viewBox="0 0 28 28" fill="none"><rect x="2" y="2" width="24" height="24" rx="6" stroke="%236c63ff" stroke-width="2" /><text x="14" y="20" text-anchor="middle" font-size="16" font-weight="bold" fill="%236c63ff">E</text></svg><span>Elysium</span></a>
+    <button class="menu-toggle" aria-label="Toggle menu"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
+    <nav>
+      <a href="../guide/">Guide</a>
+      <a href="../ui/">UI</a>
+      <a href="../std/">Std Lib</a>
+      <a href="../spec/">Spec</a>
+      <a href="../packages/">Packages</a>
+      <a href="../tooling/">Tooling</a>
+      <a href="../recipes/" class="active">Recipes</a>
+    </nav>
+  </header>
+  <main class="main">
+    <div class="breadcrumbs"><a href="../">Home</a> / <a href="./">Recipes</a> / <span>Async &amp; Parallel</span></div>
+    <div class="page-header">
+      <h1>Async &amp; Parallel Execution</h1>
+      <p>Concurrent and parallel execution primitives. <span class="tag diff-intermediate">Intermediate</span></p>
+    </div>
+    <section class="content-section animate-on-scroll">
+      <h2>Parallel Blocks</h2>
+      <p>Each statement inside a <code>parallel</code> block runs in its own thread. In the C backend this uses <code>pthread_create</code>/<code>pthread_join</code> for true parallelism. In the JS runtime it uses <code>Promise.all</code>.</p>
+<pre><code><span class="hl-kw">func</span> <span class="hl-fn">main</span>() {
+    <span class="hl-kw">parallel</span> {
+        print(<span class="hl-str">"task a\n"</span>)
+        print(<span class="hl-str">"task b\n"</span>)
+        print(<span class="hl-str">"task c\n"</span>)
+    }
+    print(<span class="hl-str">"all parallel tasks done\n"</span>)
+}
+
+<span class="hl-comment">// Multiple parallel blocks can be used</span>
+<span class="hl-kw">func</span> <span class="hl-fn">processBatch</span>() {
+    <span class="hl-kw">parallel</span> {
+        print(<span class="hl-str">"batch item 1\n"</span>)
+        print(<span class="hl-str">"batch item 2\n"</span>)
+    }
+}</code></pre>
+    </section>
+    <section class="content-section animate-on-scroll">
+      <h2>Async / Await</h2>
+      <p>Async functions declare that they execute asynchronous work. <code>await</code> is recognized only inside async context.</p>
+<pre><code><span class="hl-comment">/// Async function declaration</span>
+<span class="hl-kw">async func</span> <span class="hl-fn">fetchData</span>() <span class="hl-op">-&gt;</span> <span class="hl-type">string</span> {
+    <span class="hl-kw">let</span> data = <span class="hl-kw">await</span> httpGet(<span class="hl-str">"https://api.example.com"</span>)
+    <span class="hl-kw">return</span> data
+}
+
+<span class="hl-comment">// Lightweight tasks (green threads)</span>
+<span class="hl-kw">async</span> { producer(ch) }
+<span class="hl-kw">async</span> { consumer(ch) }</code></pre>
+    </section>
+    <section class="content-section animate-on-scroll">
+      <h2>Channels &amp; Select</h2>
+<pre><code><span class="hl-kw">let</span> ch = <span class="hl-type">Channel</span>&lt;<span class="hl-type">Int</span>&gt;(capacity: <span class="hl-num">3</span>)
+
+<span class="hl-kw">async func</span> <span class="hl-fn">producer</span>(ch: <span class="hl-type">Channel</span>&lt;<span class="hl-type">Int</span>&gt;) {
+    <span class="hl-kw">for</span> i <span class="hl-kw">in</span> <span class="hl-num">1</span>..<span class="hl-num">5</span> {
+        <span class="hl-kw">await</span> ch.send(i)
+    }
+    ch.close()
+}
+
+<span class="hl-kw">async func</span> <span class="hl-fn">consumer</span>(ch: <span class="hl-type">Channel</span>&lt;<span class="hl-type">Int</span>&gt;) {
+    <span class="hl-kw">while</span> <span class="hl-kw">let</span> value = <span class="hl-kw">await</span> ch.receive() {
+        print(<span class="hl-str">"Got: "</span>, value)
+    }
+}
+
+<span class="hl-comment">// Select on multiple channels</span>
+<span class="hl-kw">select</span> {
+    <span class="hl-kw">case</span> msg = ch1 =&gt; handle(msg)
+    <span class="hl-kw">case</span> msg = ch2 =&gt; handle(msg)
+}</code></pre>
+    </section>
+    <section class="content-section animate-on-scroll">
+      <h2>Implementation Notes</h2>
+      <ul>
+        <li><strong>Parallel blocks</strong>: v1 generates pthread-based parallelism. Each statement's code is wrapped in a <code>void* __parallel_wrapper_N(void* arg)</code> function.</li>
+        <li><strong>Await</strong>: v1 C backend executes awaited expressions synchronously inline. A full state-machine transform (heap-allocated frame + state variable switch) is planned for v2.</li>
+        <li><strong>JS Runtime</strong>: <code>__await</code> wraps values in <code>Promise.resolve</code>, <code>__async</code> ensures functions return <code>Promise</code>, <code>__parallel</code> uses <code>Promise.all</code>.</li>
+      </ul>
+    </section>
+  </main>
+  <footer class="footer"><p>Elysium 2.0 &middot; <a href="https://github.com/imstevetran/elysium">GitHub</a></p></footer>
+  <script src="../assets/js/main.js"></script>
+</body>
+</html>

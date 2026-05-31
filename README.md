@@ -10,17 +10,18 @@ The language is designed to minimize micromanagement while giving you full contr
 
 ## 🌐 Documentation Site
 
-The full documentation site is available at **[elysium-lang.dev](https://imstevetran.github.io/elysium)** (or your custom domain).
+The full documentation site is available at **[elysiumlang.github.io](https://elysiumlang.github.io/)**.
 
 The site includes:
 - **Language Guide** — complete syntax reference
 - **UI Guide** — declarative component-based UI layer
 - **Standard Library** — console, fs, transport, string, regex, datetime
+- **Package Registry** — discover and install community packages (auth, langchain, ble, etc.)
 - **Spec-Driven Development** — inline tests with spec/feat/expect
 - **Tooling** — CLI, EPM package manager, npm package, linter
 - **Recipes** — 16 practical code examples from beginner to advanced
 
-The site source lives in [`docs/`](docs/).
+The site source lives in [`core/docs/`](core/docs/) and is mirrored to [`elysiumlang/elysiumlang.github.io`](https://github.com/elysiumlang/elysiumlang.github.io) for hosting at the URL above.
 
 ---
 
@@ -124,7 +125,7 @@ ely run hello.ely
 
 | File | Description |
 |------|-------------|
-| [`docs/`](docs/) | GitHub Pages documentation site source |
+| [`core/docs/`](core/docs/) | GitHub Pages documentation site source |
 | [`docs/SYNTAX.md`](docs/SYNTAX.md) | Complete syntax reference for the language |
 | [`docs/UI.md`](docs/UI.md) | Declarative UI layer — components, state, events |
 | [`AGENT_GUIDELINES.md`](AGENT_GUIDELINES.md) | Development log and design decisions |
@@ -135,24 +136,27 @@ ely run hello.ely
 
 ```
 .
-├── docs/                          # Documentation site (GitHub Pages)
-│   ├── index.html                 # Home page
-│   ├── 404.html                   # 404 page
-│   ├── assets/css/style.css       # Shared styles
-│   ├── assets/js/main.js          # Shared scripts
-│   ├── guide/index.html           # Language guide
-│   ├── ui/index.html              # UI framework guide
-│   ├── std/index.html             # Standard library reference
-│   ├── spec/index.html            # Spec-driven development
-│   ├── tooling/index.html         # CLI, EPM, npm, linter
-│   ├── SYNTAX.md                  # Complete syntax reference
-│   ├── UI.md                      # Declarative UI layer docs
-│   └── recipes/                   # 16 practical code recipes
-├── src/                           # Compiler source (14 .rs files)
-├── elysium-rt/                    # Rust runtime library
-├── epm/                           # Elysium Package Manager
-├── npm-package/                   # npm distribution
-├── examples/                      # 23 example .ely/.elyx files
+├── core/                          # Compiler & runtime source
+│   ├── src/                       # Rust compiler source
+│   ├── elysium-rt/                # Rust runtime library (ARC, async, channels, UI)
+│   ├── epm/                       # Elysium Package Manager CLI
+│   └── docs/                      # Static docs site (deployed to GitHub Pages)
+│       ├── index.html             # Home page
+│       ├── 404.html               # 404 page
+│       ├── assets/css/style.css   # Shared styles
+│       ├── assets/js/main.js      # Shared scripts
+│       ├── guide/                 # Language guide
+│       ├── ui/                    # UI framework guide
+│       ├── std/                   # Standard library reference
+│       ├── spec/                  # Spec-driven development
+│       ├── packages/              # Package registry (auth, ble, zigbee, langchain, langgraph)
+│       ├── tooling/               # CLI, EPM, npm, linter
+│       ├── SYNTAX.md              # Complete syntax reference
+│       ├── UI.md                  # Declarative UI layer docs
+│       └── recipes/               # 16 practical code recipes
+├── extensions/                    # Extensions (JSON with C runtime)
+├── packages/                      # Pure Elysium packages (auth, ble, zigbee, langchain, langgraph)
+├── npm-package/                   # npm distribution (elysium-lang)
 ├── Cargo.toml                     # Rust workspace definition
 ├── AGENT_GUIDELINES.md            # Development log
 └── README.md                      # This file

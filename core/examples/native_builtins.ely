@@ -1,0 +1,36 @@
+/// Summary: Demonstrate all four newly implemented native builtins (datetime, is, auth, worker).
+
+func main() {
+    // 1. datetime.parse
+    print("=== datetime.parse ===")
+    let result = datetime.parse("2024-01-15T10:30:00")
+    print("parsed:", result)
+    print("now:", datetime.now())
+
+    // 2. is operator (string values only — works correctly)
+    print("\n=== is operator ===")
+    let s = "hello"
+    print("s is String:", s is String)
+    let n = "42"
+    print("n is String:", n is String)
+
+    // 3. auth — JWT sign & verify
+    print("\n=== auth.jwtSign ===")
+    let token = auth.jwtSign("my-secret", `{"sub":"user123","role":"admin"}`)
+    print("token:", token)
+    print("\n=== auth.jwtVerify ===")
+    let verified = auth.jwtVerify("my-secret", token)
+    print("verified:", verified)
+    print("\n=== auth.jwtDecode ===")
+    let decoded = auth.jwtDecode(token)
+    print("decoded:", decoded)
+
+    // 4. worker
+    print("\n=== worker.activeCount ===")
+    let count = worker.activeCount()
+    print("active workers:", count)
+    let w = worker.create("my-worker")
+    print("isRunning:", worker.isRunning(w))
+    worker.terminateAll()
+    print("after terminateAll:", worker.activeCount())
+}

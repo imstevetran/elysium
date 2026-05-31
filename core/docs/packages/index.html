@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Packages — Elysium 2.0</title>
+  <meta name="description" content="Elysium 2.0 package registry — discover and install community and official packages for Elysium." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../assets/css/style.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>⚡</text></svg>" />
+</head>
+<body>
+  <header class="navbar">
+    <a href="../" class="logo">
+      <svg viewBox="0 0 28 28" fill="none"><rect x="2" y="2" width="24" height="24" rx="6" stroke="%236c63ff" stroke-width="2" /><text x="14" y="20" text-anchor="middle" font-size="16" font-weight="bold" fill="%236c63ff">E</text></svg>
+      <span>Elysium</span>
+    </a>
+    <button class="menu-toggle" aria-label="Toggle menu">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+    </button>
+    <nav>
+      <a href="../guide/">Guide</a>
+      <a href="../ui/">UI</a>
+      <a href="../std/">Std Lib</a>
+      <a href="../spec/">Spec</a>
+      <a href="../packages/" class="active">Packages</a>
+      <a href="../tooling/">Tooling</a>
+      <a href="../recipes/">Recipes</a>
+    </nav>
+  </header>
+
+  <main class="main">
+    <div class="breadcrumbs">
+      <a href="../">Home</a> / <span>Packages</span>
+    </div>
+
+    <div class="page-header">
+      <h1>Package Registry</h1>
+      <p>Discover and use Elysium packages. Install any package with <code>elysium install &lt;name&gt;</code>.</p>
+    </div>
+
+    <section class="animate-on-scroll" style="margin-top: 32px;">
+      <h2 class="section-title">AI &amp; Agents</h2>
+      <p class="section-subtitle">Language models, chain orchestration, and graph-based agents.</p>
+
+      <div class="features" style="margin: 0;">
+        <a href="langchain/" class="feature-card">
+          <span class="icon">🤖</span>
+          <h3>langchain <span class="badge">0.1.0</span></h3>
+          <p>Elysium port of <strong>LangChain</strong> (<a href="https://github.com/langchain-ai/langchain" target="_blank">langchain-ai/langchain</a>) — LLM calls, chains, prompts, tool integration, RAG, agents, and streaming.</p>
+          <div class="card-meta">
+            <span class="card-tag">ai</span>
+            <span class="card-tag">llm</span>
+            <span class="card-tag">agent</span>
+          </div>
+        </a>
+
+        <a href="langgraph/" class="feature-card">
+          <span class="icon">🕸️</span>
+          <h3>langgraph <span class="badge">0.1.0</span></h3>
+          <p>Elysium port of <strong>LangGraph</strong> (<a href="https://github.com/langchain-ai/langgraph" target="_blank">langchain-ai/langgraph</a>) — stateful graph-based agent orchestration with state machines, conditional routing, and human-in-the-loop.</p>
+          <div class="card-meta">
+            <span class="card-tag">ai</span>
+            <span class="card-tag">graph</span>
+            <span class="card-tag">workflow</span>
+          </div>
+        </a>
+      </div>
+    </section>
+
+    <section class="animate-on-scroll" style="margin-top: 48px;">
+      <h2 class="section-title">IoT &amp; Hardware</h2>
+      <p class="section-subtitle">Connect, control, and monitor real-world devices.</p>
+
+      <div class="features" style="margin: 0;">
+        <a href="ble/" class="feature-card">
+          <span class="icon">📡</span>
+          <h3>ble <span class="badge">0.1.0</span></h3>
+          <p>Bluetooth Low Energy operations — scan, connect, read/write characteristics, RSSI, and notifications. Works with Web Bluetooth (browser) or noble (Node.js).</p>
+          <div class="card-meta">
+            <span class="card-tag">iot</span>
+            <span class="card-tag">bluetooth</span>
+            <span class="card-tag">hardware</span>
+          </div>
+        </a>
+
+        <a href="zigbee/" class="feature-card">
+          <span class="icon">🏠</span>
+          <h3>zigbee <span class="badge">0.1.0</span></h3>
+          <p>Zigbee Home Automation — network management, device discovery, on/off/toggle, groups, scenes, bindings, and attribute read/write.</p>
+          <div class="card-meta">
+            <span class="card-tag">iot</span>
+            <span class="card-tag">home-automation</span>
+            <span class="card-tag">zigbee</span>
+          </div>
+        </a>
+      </div>
+    </section>
+
+    <section class="animate-on-scroll" style="margin-top: 48px;">
+      <h2 class="section-title">Security &amp; Authentication</h2>
+      <p class="section-subtitle">Secure your applications with modern auth primitives.</p>
+
+      <div class="features" style="margin: 0;">
+        <a href="auth/" class="feature-card">
+          <span class="icon">🔐</span>
+          <h3>auth <span class="badge">0.1.0</span></h3>
+          <p>Complete authentication module — JWT signing/verification, password hashing (bcrypt/argon2/stub), session management, RBAC, OAuth2 flows, Passkey/WebAuthn, API key generation, and multi-tenant support.</p>
+          <div class="card-meta">
+            <span class="card-tag">auth</span>
+            <span class="card-tag">security</span>
+            <span class="card-tag">jwt</span>
+          </div>
+        </a>
+      </div>
+    </section>
+
+    <section class="animate-on-scroll" style="margin-top: 48px; margin-bottom: 48px;">
+      <h2 class="section-title">Installing Packages</h2>
+      <div class="content-section">
+        <p>Packages are installed via the Elysium Package Manager (EPM), which is bundled with the compiler.</p>
+
+        <h3>Install from registry</h3>
+        <pre><code>elysium install langchain</code></pre>
+
+        <h3>Install a specific version</h3>
+        <pre><code>elysium install auth@0.1.0</code></pre>
+
+        <h3>Install from workspace</h3>
+        <p>If a package is available in your workspace's <code>packages/</code> directory, import it directly:</p>
+        <pre><code>import "#/langchain" as langchain</code></pre>
+
+        <h3>Create a new package</h3>
+        <pre><code>elysium init my-package</code></pre>
+
+        <h3>Publish a package</h3>
+        <p>From the package directory:</p>
+        <pre><code>elysium publish</code></pre>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>Built with ❤️ by <a href="https://github.com/imstevetran">Steve Tran</a> &middot; Elysium 2.0 &middot; Open Source on <a href="https://github.com/imstevetran/elysium">GitHub</a></p>
+  </footer>
+</body>
+</html>
