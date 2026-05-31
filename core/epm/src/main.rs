@@ -1,3 +1,5 @@
+mod acl;
+mod auth;
 mod cli;
 mod manifest;
 mod registry;
@@ -5,7 +7,6 @@ mod resolver;
 mod tree_shake;
 
 use clap::Parser;
-use std::path::PathBuf;
 
 fn main() {
     let cli = cli::Cli::parse();
@@ -16,18 +17,22 @@ fn main() {
     }
 
     let result = match &cli.command {
-        cli::Commands::Init { name, version, description, author, license, force } => {
-            cmd_init(name, version, description, author, license, *force)
-        }
+        cli::Commands::Init {
+            name,
+            org,
+            version,
+            description,
+            author,
+            license,
+            force,
+        } => cmd_init(name, org.as_deref(), version, description, author, license, *force),
         cli::Commands::Install { package, version, save, shake, legacy } => {
             cmd_install(package.as_deref(), version.as_deref(), *save, *shake, *legacy)
         }
         cli::Commands::Lock => {
             cmd_lock()
         }
-        cli::Commands::Publish { registry: _ } => {
-            cmd_publish()
-        }
+        cli::Commands::Publish { registry: _ } => cmd_publish(),
         cli::Commands::Search { query } => {
             cmd_search(query)
         }
@@ -43,12 +48,15 @@ fn main() {
         cli::Commands::Why { package } => {
             cmd_why(package)
         }
-        cli::Commands::Login { token } => {
-            cmd_login(token)
-        }
-        cli::Commands::List => {
-            cmd_list()
-        }
+        cli::Commands::Login => auth::cmd_login(),
+        cli::Commands::Logout => auth::cmd_logout(),
+        cli::Commands::Whoami => auth::cmd_whoami(),
+        cli::Commands::Org { command } => match command {
+            cli::OrgCommands::Create { name } => cmd_org_create(&name),
+            cli::OrgCommands::List => cmd_org_list(),
+        },
+        cli::Commands::Grant { github_login } => cmd_grant(&github_login),
+        cli::Commands::List => cmd_list(),
     };
 
     if let Err(e) = result {
@@ -61,6 +69,7 @@ fn main() {
 
 fn cmd_init(
     name: &Option<String>,
+    org: Option<&str>,
     version: &str,
     description: &Option<String>,
     author: &Option<String>,
@@ -74,12 +83,27 @@ fn cmd_init(
         return Err(format!("{} already exists. Use --force to overwrite.", manifest_path.display()));
     }
 
-    let package_name = name.clone().unwrap_or_else(|| {
+    let pkg_part = name.clone().unwrap_or_else(|| {
         cwd.file_name()
             .and_then(|s| s.to_str())
             .unwrap_or("package")
             .to_string()
     });
+
+    let package_name = match org {
+        Some(org_slug) => {
+            acl::validate_slug(org_slug, "org")?;
+            acl::validate_slug(&pkg_part, "package")?;
+            acl::format_scoped_name(org_slug, &pkg_part)
+        }
+        None => {
+            eprintln!(
+                "Tip: use --org <slug> so the package is publishable as @org/{} (run `epm org create` first).",
+                pkg_part
+            );
+            pkg_part
+        }
+    };
 
     let mut m = manifest::Manifest::new(&package_name, version);
     m.description = description.clone();
@@ -227,21 +251,22 @@ fn cmd_lock() -> Result<(), String> {
 }
 
 fn cmd_publish() -> Result<(), String> {
+    let github_login = auth::require_github_user()?;
     let cwd = std::env::current_dir().map_err(|e| format!("Cannot get current dir: {}", e))?;
     let manifest = manifest::Manifest::load_from_dir(&cwd)?;
 
-    // Read token
-    let token = load_token()?;
-
-    // Validate manifest fields
     if manifest.name.is_empty() {
         return Err("Package name is required in elysium.json".to_string());
     }
     if manifest.version.is_empty() {
         return Err("Package version is required in elysium.json".to_string());
     }
+    acl::parse_scoped_package_name(&manifest.name)?;
 
-    println!("Publishing {} v{} ...", manifest.name, manifest.version);
+    println!(
+        "Publishing {} v{} as @{} ...",
+        manifest.name, manifest.version, github_login
+    );
 
     // Check that entry file exists
     let entry_file = manifest.entry.as_deref().unwrap_or("main.ely");
@@ -252,7 +277,13 @@ fn cmd_publish() -> Result<(), String> {
 
     // Create a temporary directory and build tarball
     let temp_dir = tempfile::tempdir().map_err(|e| format!("Cannot create temp dir: {}", e))?;
-    let tarball_path = temp_dir.path().join(format!("{}-{}.tar.gz", manifest.name, manifest.version));
+    // Manifest name may contain `/` (@org/pkg) — keep tarball filename a single path segment
+    let tarball_filename = format!(
+        "{}-{}.tar.gz",
+        manifest.name.replace('@', "").replace('/', "-"),
+        manifest.version
+    );
+    let tarball_path = temp_dir.path().join(tarball_filename);
 
     // Create tarball of the package dir (excluding elysium_modules, .git, etc.)
     let tar_file = std::fs::File::create(&tarball_path)
@@ -280,30 +311,38 @@ fn cmd_publish() -> Result<(), String> {
 
     println!("Created tarball: {}", tarball_path.display());
 
-    // Publish to registry
-    // Configure git credential helper with token
-    let token_dir = registry_cache_dir();
-    std::fs::create_dir_all(&token_dir).map_err(|e| format!("Cannot create cache dir: {}", e))?;
-
-    // Temporarily set GIT_ASKPASS to a script that returns the token
-    std::env::set_var("EPM_GIT_TOKEN", &token);
-
-    // Write a temporary askpass script that outputs the token
-    let askpass_path = token_dir.join("git-askpass.sh");
-    std::fs::write(&askpass_path, format!(
-        "#!/bin/sh\necho \"${{EPM_GIT_TOKEN}}\""
-    )).map_err(|e| format!("Cannot write askpass: {}", e))?;
-
-    use std::os::unix::fs::PermissionsExt;
-    std::fs::set_permissions(&askpass_path, std::fs::Permissions::from_mode(0o755))
-        .map_err(|e| format!("Cannot set executable: {}", e))?;
-
-    std::env::set_var("GIT_ASKPASS", askpass_path.to_str().unwrap());
-
-    registry::publish_package(&manifest, &tarball_path)?;
+    registry::publish_package(&github_login, &manifest, &tarball_path)?;
 
     println!("Published {} v{} to registry!", manifest.name, manifest.version);
     Ok(())
+}
+
+fn cmd_org_create(org_slug: &str) -> Result<(), String> {
+    let login = auth::require_github_user()?;
+    registry::create_org(&login, org_slug)
+}
+
+fn cmd_org_list() -> Result<(), String> {
+    let login = auth::require_github_user()?;
+    let orgs = registry::list_orgs(&login)?;
+    if orgs.is_empty() {
+        println!("You do not own any orgs yet. Create one: epm org create <name>");
+        return Ok(());
+    }
+    println!("Orgs owned by @{}:", login);
+    for (slug, entry) in orgs {
+        let created = entry.created_at.as_deref().unwrap_or("-");
+        println!("  @{}  (created {})", slug, created);
+    }
+    Ok(())
+}
+
+fn cmd_grant(collaborator: &str) -> Result<(), String> {
+    let login = auth::require_github_user()?;
+    let cwd = std::env::current_dir().map_err(|e| format!("Cannot get current dir: {}", e))?;
+    let manifest = manifest::Manifest::load_from_dir(&cwd)?;
+    acl::parse_scoped_package_name(&manifest.name)?;
+    registry::grant_collaborator(&login, &manifest.name, collaborator)
 }
 
 fn cmd_search(query: &str) -> Result<(), String> {
@@ -454,25 +493,6 @@ fn cmd_why(package: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn cmd_login(token: &str) -> Result<(), String> {
-    let home = std::env::var("HOME").map_err(|_| "HOME not set".to_string())?;
-    let epm_dir = PathBuf::from(&home).join(".epm");
-    std::fs::create_dir_all(&epm_dir)
-        .map_err(|e| format!("Cannot create .epm directory: {}", e))?;
-
-    let token_path = epm_dir.join("token");
-    // Store token with restricted permissions (readable only by user)
-    std::fs::write(&token_path, format!("{}\n", token))
-        .map_err(|e| format!("Cannot write token: {}", e))?;
-
-    use std::os::unix::fs::PermissionsExt;
-    std::fs::set_permissions(&token_path, std::fs::Permissions::from_mode(0o600))
-        .map_err(|e| format!("Cannot set token file permissions: {}", e))?;
-
-    println!("Logged in. Token stored in {}", token_path.display());
-    Ok(())
-}
-
 fn cmd_list() -> Result<(), String> {
     let cwd = std::env::current_dir().map_err(|e| format!("Cannot get current dir: {}", e))?;
     let deps_dir = cwd.join("elysium_modules");
@@ -593,28 +613,6 @@ fn load_env_file(path: &str) -> Result<(), String> {
     }
 
     Ok(())
-}
-
-fn load_token() -> Result<String, String> {
-    // Check environment variable first (can be set via .env file)
-    if let Ok(token) = std::env::var("EPM_GIT_TOKEN") {
-        let trimmed = token.trim().to_string();
-        if !trimmed.is_empty() {
-            return Ok(trimmed);
-        }
-    }
-
-    // Fall back to stored token file
-    let home = std::env::var("HOME").map_err(|_| "HOME not set".to_string())?;
-    let token_path = PathBuf::from(&home).join(".epm").join("token");
-    let token = std::fs::read_to_string(&token_path)
-        .map_err(|_| "Not logged in. Set EPM_GIT_TOKEN in your .env file or run `epm login <token>` first.".to_string())?;
-    Ok(token.trim().to_string())
-}
-
-fn registry_cache_dir() -> PathBuf {
-    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-    PathBuf::from(home).join(".epm")
 }
 
 fn add_dir_to_tar(

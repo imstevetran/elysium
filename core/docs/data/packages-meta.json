@@ -1,0 +1,56 @@
+{
+  "categories": {
+    "ai": {
+      "title": "AI & Agents",
+      "subtitle": "Language models, chain orchestration, and graph-based agents.",
+      "order": 1
+    },
+    "iot": {
+      "title": "IoT & Hardware",
+      "subtitle": "Connect, control, and monitor real-world devices.",
+      "order": 2
+    },
+    "security": {
+      "title": "Security & Authentication",
+      "subtitle": "Secure your applications with modern auth primitives.",
+      "order": 3
+    },
+    "other": {
+      "title": "Community",
+      "subtitle": "Packages from the EPM registry.",
+      "order": 99
+    }
+  },
+  "packages": {
+    "@elysium/langchain": {
+      "icon": "🤖",
+      "category": "ai",
+      "tags": ["ai", "llm", "agent"],
+      "docSlug": "langchain"
+    },
+    "@elysium/langgraph": {
+      "icon": "🕸️",
+      "category": "ai",
+      "tags": ["ai", "graph", "workflow"],
+      "docSlug": "langgraph"
+    },
+    "@elysium/ble": {
+      "icon": "📡",
+      "category": "iot",
+      "tags": ["iot", "bluetooth", "hardware"],
+      "docSlug": "ble"
+    },
+    "@elysium/zigbee": {
+      "icon": "🏠",
+      "category": "iot",
+      "tags": ["iot", "home-automation", "zigbee"],
+      "docSlug": "zigbee"
+    },
+    "@elysium/auth": {
+      "icon": "🔐",
+      "category": "security",
+      "tags": ["auth", "security", "jwt"],
+      "docSlug": "auth"
+    }
+  }
+}

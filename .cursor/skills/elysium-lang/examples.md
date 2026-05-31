@@ -224,7 +224,7 @@ component TodoApp {
 ## 14. LangChain — LLM & AI Operations
 
 ```elysium
-import "#/langchain" as langchain
+import "#/@elysium/langchain" as langchain
 
 func main() {
     let response = langchain.llm("gpt-4", "Hello!")
@@ -239,7 +239,7 @@ func main() {
 ## 15. LangGraph — Stateful Agent Graphs
 
 ```elysium
-import "#/langgraph" as langgraph
+import "#/@elysium/langgraph" as langgraph
 
 func main() {
     let gid = langgraph.graph("simple_agent")
@@ -406,6 +406,6 @@ ely gen-test myfile.ely -o tests/stubs.ely
 ely port myfile.ts -o myfile.ely
 
 # EPM package manager
-epm install langchain
-epm install langgraph
+epm install @elysium/langchain
+epm install @elysium/langgraph
 ```

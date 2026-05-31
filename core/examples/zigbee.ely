@@ -3,7 +3,7 @@
 //
 // Usage: ely check examples/zigbee.ely
 
-import "#/zigbee" as zigbee
+import "#/@elysium/zigbee" as zigbee
 
 func main() {
     // Initialize the Zigbee coordinator

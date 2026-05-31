@@ -1,6 +1,6 @@
 {
   "name": "elysium-lang",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Elysium 2.0 — a human-friendly, AI-compatible programming language compiler and runtime",
   "keywords": [
     "elysium",
@@ -17,7 +17,8 @@
   "author": "Steve Tran",
   "bin": {
     "elysium": "./bin/elysium.js",
-    "ely": "./bin/ely.js"
+    "ely": "./bin/ely.js",
+    "epm": "./bin/epm.js"
   },
   "main": "./runtime/index.js",
   "exports": {

@@ -190,8 +190,8 @@ All return String: `auth.jwtSign(payload, expiresIn)`, `.jwtVerify(token)`, `.jw
 ## Elysium Source Packages (import via EPM)
 
 ```
-import "#/langchain" as langchain     # LLM, Chat, RAG, Agents (transport-based)
-import "#/langgraph" as langgraph     # Stateful graph-based agent orchestration
+import "#/@elysium/langchain" as langchain     # LLM, Chat, RAG, Agents (transport-based)
+import "#/@elysium/langgraph" as langgraph     # Stateful graph-based agent orchestration
 ```
 
 ### langchain API

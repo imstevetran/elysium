@@ -1,5 +1,5 @@
 {
-  "name": "zigbee",
+  "name": "@elysium/zigbee",
   "version": "0.1.0",
   "description": "Zigbee Home Automation operations — device control, groups, scenes, network management",
   "entry": "zigbee.ely",

@@ -3,8 +3,9 @@
 /**
  * Post-install script for elysium-lang.
  *
- * Downloads the prebuilt binary for the current platform from GitHub Releases.
- * Falls back to building from source if no prebuilt binary is available.
+ * Downloads the prebuilt elysium and epm binaries for the current platform
+ * from GitHub Releases. Falls back to building from source if no prebuilt
+ * binary is available.
  *
  * This script has zero external dependencies — only Node.js built-ins.
  */
@@ -17,8 +18,10 @@ const zlib = require('zlib');
 
 const PKG_VERSION = require('../package.json').version;
 const BIN_DIR = path.resolve(__dirname, '..', 'bin');
-const RUNTIME_DIR = path.resolve(__dirname, '..', 'runtime');
 
+/**
+ * Map process.platform + arch → Rust target triple.
+ */
 function getTarget() {
   const os = process.platform;
   const arch = process.arch;
@@ -75,45 +78,51 @@ function extractGzip(inputPath, outputPath) {
   });
 }
 
-async function downloadBinary(target) {
+/**
+ * Download a gzipped binary from GitHub Releases and install it into bin/.
+ *
+ * @param {string} label  — "elysium" or "epm"
+ * @param {string} target — Rust target triple
+ */
+async function downloadBinary(label, target) {
   const repo = 'imstevetran/elysium';
   const tag = `v${PKG_VERSION}`;
   const ext = target.includes('windows') ? '.exe' : '';
-  const binName = `elysium${ext}`;
-  const archiveName = `elysium-${PKG_VERSION}-${target}.gz`;
+  const binFilename = `${label}${ext}`;
+  const archiveName = `${label}-${PKG_VERSION}-${target}.gz`;
   const url = `https://github.com/${repo}/releases/download/${tag}/${archiveName}`;
-  const tmpDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'elysium-install-'));
+  const tmpDir = fs.mkdtempSync(path.join(require('os').tmpdir(), `elysium-install-${label}-`));
   const gzPath = path.join(tmpDir, archiveName);
 
-  console.log(`Downloading: ${url}`);
+  console.log(`Downloading ${label}: ${url}`);
   await download(url, gzPath);
 
   // Decompress gzip to get the binary
-  const binPath = path.join(tmpDir, binName);
+  const binPath = path.join(tmpDir, binFilename);
   await extractGzip(gzPath, binPath);
 
-  // Copy to bin dir
+  // Copy to bin dir, preserving the original name (elysium or epm)
   fs.mkdirSync(BIN_DIR, { recursive: true });
-  const dstPath = path.join(BIN_DIR, binName);
+  const dstPath = path.join(BIN_DIR, binFilename);
   fs.copyFileSync(binPath, dstPath);
   if (!target.includes('windows')) {
     fs.chmodSync(dstPath, 0o755);
   }
-  console.log(`Binary installed: ${dstPath}`);
+  console.log(`  installed: ${dstPath}`);
 
   // Cleanup
   fs.rmSync(tmpDir, { recursive: true, force: true });
 }
 
-function buildFromSource() {
-  console.log('No prebuilt binary available. Building from source...');
+function buildFromSource(label) {
+  const binName = process.platform === 'win32' ? `${label}.exe` : label;
+  const rootDir = path.resolve(__dirname, '..', '..');
+
+  console.log(`No prebuilt binary for ${label}. Building from source...`);
   console.log('This requires Rust to be installed (https://rustup.rs).\n');
 
-  const rootDir = path.resolve(__dirname, '..', '..');
-  const binName = process.platform === 'win32' ? 'elysium.exe' : 'elysium';
-
   try {
-    execSync('cargo build --release --bin elysium', { cwd: rootDir, stdio: 'inherit' });
+    execSync(`cargo build --release --bin ${label}`, { cwd: rootDir, stdio: 'inherit' });
     const srcBin = path.join(rootDir, 'target', 'release', binName);
     const dstBin = path.join(BIN_DIR, binName);
     fs.mkdirSync(BIN_DIR, { recursive: true });
@@ -121,24 +130,32 @@ function buildFromSource() {
     if (process.platform !== 'win32') fs.chmodSync(dstBin, 0o755);
     console.log(`Built and installed: ${dstBin}`);
   } catch (e) {
-    console.error('Build failed. Install Rust from https://rustup.rs');
+    console.error(`Build failed for ${label}. Install Rust from https://rustup.rs`);
     process.exit(1);
+  }
+}
+
+async function installBinary(label) {
+  try {
+    const target = getTarget();
+    await downloadBinary(label, target);
+  } catch (e) {
+    console.log(`${label} prebuilt binary unavailable: ${e.message}`);
+    buildFromSource(label);
   }
 }
 
 async function main() {
   try {
     fs.mkdirSync(BIN_DIR, { recursive: true });
-    const target = getTarget();
 
-    try {
-      await downloadBinary(target);
-    } catch (e) {
-      console.log(`Prebuilt binary unavailable: ${e.message}`);
-      buildFromSource();
-    }
+    // Install both binaries
+    await installBinary('elysium');
+    await installBinary('epm');
 
-    console.log('\nElysium installed! Run: npx elysium --help');
+    console.log('\nElysium installed! Commands available:');
+    console.log('  npx elysium --help    (or: npx ely --help)');
+    console.log('  npx epm --help');
   } catch (e) {
     console.error('Installation failed:', e.message);
     process.exit(1);

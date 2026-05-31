@@ -1,6 +1,6 @@
 /// Summary: LangGraph-style stateful graph-based agent orchestration in pure Elysium.
 /// Imports the langgraph package from the EPM registry.
-import "#/langgraph" as langgraph
+import "#/@elysium/langgraph" as langgraph
 
 func main() {
     // Create a new state graph registry

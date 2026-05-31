@@ -9,13 +9,12 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="../assets/css/style.css" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>⚡</text></svg>" />
+  <link rel="icon" href="../assets/brand/favicon.png" type="image/png" />
 </head>
 <body>
   <header class="navbar">
     <a href="../" class="logo">
-      <svg viewBox="0 0 28 28" fill="none"><rect x="2" y="2" width="24" height="24" rx="6" stroke="%236c63ff" stroke-width="2" /><text x="14" y="20" text-anchor="middle" font-size="16" font-weight="bold" fill="%236c63ff">E</text></svg>
-      <span>Elysium</span>
+      <img src="../assets/brand/elysium-logo.png" alt="Elysium" class="elysium-logo" width="120" height="40" />
     </a>
     <button class="menu-toggle" aria-label="Toggle menu">
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
@@ -566,7 +565,7 @@ count = count + <span class="hl-num">1</span>
         <p>Packages are reusable modules written entirely in Elysium. They live in the <code>packages/</code> directory as self-contained folders with their own <code>elysium.json</code> manifest.</p>
 
         <h3>Package Directory Structure</h3>
-<pre><code>packages/auth/
+<pre><code>packages/@elysium/auth/
     elysium.json    # package manifest
     auth.ely        # source entry point
     LICENSE         # MIT license</code></pre>
@@ -585,7 +584,7 @@ count = count + <span class="hl-num">1</span>
 
         <h3>Importing a Package</h3>
         <p>Use the <code>#/</code> prefix to import packages:</p>
-<pre><code><span class="hl-kw">import</span> <span class="hl-str">"#/auth"</span> <span class="hl-kw">as</span> auth
+<pre><code><span class="hl-kw">import</span> <span class="hl-str">"#/@elysium/auth"</span> <span class="hl-kw">as</span> auth
 
 <span class="hl-kw">let</span> token = auth.jwtSign(<span class="hl-str">"user123"</span>, <span class="hl-str">"secret"</span>)</code></pre>
         <p>The compiler resolves <code>#/name</code> by looking up <code>packages/name/elysium.json</code> and reading its <code>entry</code> field.</p>

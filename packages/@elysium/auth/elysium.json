@@ -1,5 +1,5 @@
 {
-  "name": "auth",
+  "name": "@elysium/auth",
   "version": "0.1.0",
   "description": "Authentication module — JWT, Password Hashing, Sessions, RBAC, OAuth2, Passkey, API Keys, Multi-tenant",
   "entry": "auth.ely",

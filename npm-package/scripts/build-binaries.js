@@ -3,7 +3,7 @@
 /**
  * Build Elysium binaries for npm release.
  *
- * Cross-compiles the elysium binary for multiple targets and gzips
+ * Cross-compiles the elysium and epm binaries for multiple targets and gzips
  * them individually for GitHub Releases.
  *
  * Usage:
@@ -54,23 +54,32 @@ function getHostTarget() {
   throw new Error(`Unsupported host platform: ${os} ${arch}`);
 }
 
-function cargoBuild(target) {
-  console.log(`Building for ${target}...`);
-  execSync(`cargo build --release --target ${target} --bin elysium`, {
+/**
+ * Run cargo build for a specific binary and target.
+ */
+function cargoBuild(target, binName) {
+  console.log(`Building ${binName} for ${target}...`);
+  execSync(`cargo build --release --target ${target} --bin ${binName}`, {
     cwd: ROOT_DIR,
     stdio: 'inherit',
   });
 }
 
-function gzipBinary(target, binName) {
+/**
+ * Gzip a single binary into a named archive.
+ * Archive format: {label}-{version}-{target}.gz
+ */
+function gzipBinary(target, binName, label) {
+  const ext = target.includes('windows') ? '.exe' : '';
+  const binFilename = `${binName}${ext}`;
   const targetDir = path.join(ROOT_DIR, 'target', target, 'release');
-  const binPath = path.join(targetDir, binName);
+  const binPath = path.join(targetDir, binFilename);
 
   if (!fs.existsSync(binPath)) {
     throw new Error(`Binary not found: ${binPath}`);
   }
 
-  const archiveName = `elysium-${PKG_VERSION}-${TARGET_SHORT[target]}.gz`;
+  const archiveName = `${label}-${PKG_VERSION}-${TARGET_SHORT[target]}.gz`;
   const archivePath = path.join(OUT_DIR, archiveName);
 
   fs.mkdirSync(OUT_DIR, { recursive: true });
@@ -93,15 +102,19 @@ async function main() {
     targets = [getHostTarget()];
   }
 
-  console.log(`Building Elysium v${PKG_VERSION} for ${targets.length} target(s)...\n`);
+  const binaries = ['elysium', 'epm'];
+  console.log(`Building Elysium v${PKG_VERSION} for ${targets.length} target(s), ${binaries.length} binary(ies)\n`);
 
   for (const target of targets) {
-    const binName = target.includes('windows') ? 'elysium.exe' : 'elysium';
-    cargoBuild(target);
-    gzipBinary(target, binName);
+    for (const binName of binaries) {
+      cargoBuild(target, binName);
+      // elysium binary uses label "elysium", epm binary uses label "epm"
+      gzipBinary(target, binName, binName);
+    }
   }
 
   console.log(`\nDone! Tarballs in: ${OUT_DIR}`);
+  fs.readdirSync(OUT_DIR).forEach(f => console.log(`  ${f}`));
 }
 
 main().catch((e) => {

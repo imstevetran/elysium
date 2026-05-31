@@ -9,13 +9,12 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="../assets/css/style.css" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>⚡</text></svg>" />
+  <link rel="icon" href="../assets/brand/favicon.png" type="image/png" />
 </head>
 <body>
   <header class="navbar">
     <a href="../" class="logo">
-      <svg viewBox="0 0 28 28" fill="none"><rect x="2" y="2" width="24" height="24" rx="6" stroke="%236c63ff" stroke-width="2" /><text x="14" y="20" text-anchor="middle" font-size="16" font-weight="bold" fill="%236c63ff">E</text></svg>
-      <span>Elysium</span>
+      <img src="../assets/brand/elysium-logo.png" alt="Elysium" class="elysium-logo" width="120" height="40" />
     </a>
     <button class="menu-toggle" aria-label="Toggle menu">
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
@@ -646,7 +645,7 @@ json.free(data)</code></pre>
     <!-- langchain -->
     <section id="langchain" class="content-section animate-on-scroll">
       <h2><code>langchain</code> — LLM &amp; AI Operations</h2>
-      <p>LangChain-style AI operations for LLM calls, RAG, summarization, classification, translation, and agents. Installable via EPM: <code>epm install langchain</code>.</p>
+      <p>LangChain-style AI operations for LLM calls, RAG, summarization, classification, translation, and agents. Installable via EPM: <code>epm install @elysium/langchain</code>.</p>
 
       <div class="api-item">
         <div class="signature">langchain.llm(model: String, prompt: String) -> String</div>
@@ -675,7 +674,7 @@ json.free(data)</code></pre>
 
       <p>Uses environment variables: <code>OPENAI_BASE_URL</code> (default: <code>http://localhost:11434/v1</code> for Ollama), <code>LLM_MODEL</code>, <code>OPENAI_API_KEY</code>.</p>
 
-<pre><code><span class="hl-kw">import</span> <span class="hl-str">"#/langchain"</span> <span class="hl-kw">as</span> langchain
+<pre><code><span class="hl-kw">import</span> <span class="hl-str">"#/@elysium/langchain"</span> <span class="hl-kw">as</span> langchain
 
 <span class="hl-kw">func</span> <span class="hl-fn">main</span>() {
     <span class="hl-kw">let</span> response = langchain.llm(<span class="hl-str">"gpt-4o"</span>, <span class="hl-str">"Hello!"</span>)
@@ -686,7 +685,7 @@ json.free(data)</code></pre>
     <!-- langgraph -->
     <section id="langgraph" class="content-section animate-on-scroll">
       <h2><code>langgraph</code> — Stateful Agent Graphs</h2>
-      <p>LangGraph-style stateful agent orchestration with graphs, nodes, edges, and conditional routing. Installable via EPM: <code>epm install langgraph</code>.</p>
+      <p>LangGraph-style stateful agent orchestration with graphs, nodes, edges, and conditional routing. Installable via EPM: <code>epm install @elysium/langgraph</code>.</p>
 
       <div class="api-item">
         <div class="signature">langgraph.graph(name: String) -> String</div>
@@ -713,7 +712,7 @@ json.free(data)</code></pre>
         <p>Run the graph and stream intermediate outputs.</p>
       </div>
 
-<pre><code><span class="hl-kw">import</span> <span class="hl-str">"#/langgraph"</span> <span class="hl-kw">as</span> langgraph
+<pre><code><span class="hl-kw">import</span> <span class="hl-str">"#/@elysium/langgraph"</span> <span class="hl-kw">as</span> langgraph
 
 <span class="hl-kw">func</span> <span class="hl-fn">main</span>() {
     <span class="hl-kw">let</span> gid = langgraph.graph(<span class="hl-str">"simple_agent"</span>)
@@ -727,7 +726,7 @@ json.free(data)</code></pre>
     <!-- ble -->
     <section id="ble" class="content-section animate-on-scroll">
       <h2><code>ble</code> — Bluetooth Low Energy</h2>
-      <p>Bluetooth Low Energy operations: scanning, connection, characteristic read/write. Import via <code>import "#/ble" as ble</code>.</p>
+      <p>Bluetooth Low Energy operations: scanning, connection, characteristic read/write. Import via <code>import "#/@elysium/ble" as ble</code>.</p>
 
       <div class="api-item">
         <div class="signature">ble.scan() -> String</div>
@@ -750,7 +749,7 @@ json.free(data)</code></pre>
         <p>Write to a characteristic.</p>
       </div>
 
-<pre><code><span class="hl-kw">import</span> <span class="hl-str">"#/ble"</span> <span class="hl-kw">as</span> ble
+<pre><code><span class="hl-kw">import</span> <span class="hl-str">"#/@elysium/ble"</span> <span class="hl-kw">as</span> ble
 
 <span class="hl-kw">func</span> <span class="hl-fn">main</span>() {
     <span class="hl-kw">let</span> deviceId = ble.scan()
@@ -763,7 +762,7 @@ json.free(data)</code></pre>
     <!-- zigbee -->
     <section id="zigbee" class="content-section animate-on-scroll">
       <h2><code>zigbee</code> — Home Automation</h2>
-      <p>Zigbee home automation: network management, device control, attribute read/write. Import via <code>import "#/zigbee" as zigbee</code>.</p>
+      <p>Zigbee home automation: network management, device control, attribute read/write. Import via <code>import "#/@elysium/zigbee" as zigbee</code>.</p>
 
       <div class="api-item">
         <div class="signature">zigbee.start() -> Nil</div>
@@ -790,7 +789,7 @@ json.free(data)</code></pre>
         <p>Get the number of joined devices.</p>
       </div>
 
-<pre><code><span class="hl-kw">import</span> <span class="hl-str">"#/zigbee"</span> <span class="hl-kw">as</span> zigbee
+<pre><code><span class="hl-kw">import</span> <span class="hl-str">"#/@elysium/zigbee"</span> <span class="hl-kw">as</span> zigbee
 
 <span class="hl-kw">func</span> <span class="hl-fn">main</span>() {
     zigbee.start()

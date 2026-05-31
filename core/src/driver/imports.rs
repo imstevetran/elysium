@@ -89,6 +89,18 @@ pub fn find_project_root(dir: &std::path::Path) -> Option<PathBuf> {
     manifest::find_project_root(dir)
 }
 
+/// Map pre-scope package names to the official `@elysium/*` registry names.
+fn legacy_package_alias(name: &str) -> &str {
+    match name {
+        "langchain" => "@elysium/langchain",
+        "langgraph" => "@elysium/langgraph",
+        "auth" => "@elysium/auth",
+        "ble" => "@elysium/ble",
+        "zigbee" => "@elysium/zigbee",
+        other => other,
+    }
+}
+
 /// Try to resolve an import path relative to the source directory.
 /// Supports:
 ///   import "./foo.ely"       — relative to importing file
@@ -130,6 +142,8 @@ pub fn find_import_file(from_dir: &std::path::Path, import_path: &str) -> std::r
     if let Some(pkg_name) = clean.strip_prefix("#/") {
         let root = find_project_root(from_dir)
             .ok_or_else(|| format!("cannot find project root (elysium.json) from `{}`", from_dir.display()))?;
+        // Legacy short names → official @elysium/* scope
+        let pkg_name = legacy_package_alias(pkg_name);
         let mods_dir = root.join("elysium_modules");
         let pkg_dir = mods_dir.join(pkg_name);
 

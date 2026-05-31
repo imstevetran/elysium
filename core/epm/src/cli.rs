@@ -15,8 +15,11 @@ pub struct Cli {
 pub enum Commands {
     /// Initialize a new Elysium package in the current directory
     Init {
-        /// Package name (defaults to directory name)
+        /// Package name within the org (defaults to directory name)
         name: Option<String>,
+        /// Org scope (required for publishing); creates name `@org/name`
+        #[arg(long)]
+        org: Option<String>,
         /// Version (default: 0.1.0)
         #[arg(short, long, default_value = "0.1.0")]
         version: String,
@@ -55,9 +58,9 @@ pub enum Commands {
     /// Generate a lockfile (elysium.lock) from current resolution
     Lock,
 
-    /// Publish the current package to the registry
+    /// Publish the current package to the registry (requires GitHub sign-in)
     Publish {
-        /// Registry URL (default: https://github.com/imstevetran/epm-registry.git)
+        /// Registry URL (reserved; default registry is configured in EPM)
         #[arg(short, long)]
         registry: Option<String>,
     },
@@ -92,12 +95,38 @@ pub enum Commands {
         package: String,
     },
 
-    /// Log in to the registry (stores GitHub token)
-    Login {
-        /// GitHub personal access token
-        token: String,
+    /// Sign in with your GitHub account (via GitHub CLI; no token stored by EPM)
+    Login,
+
+    /// Sign out of GitHub on this machine (delegates to GitHub CLI)
+    Logout,
+
+    /// Show the GitHub account you are signed in as
+    Whoami,
+
+    /// Manage registry orgs (scoped as `@org/package`)
+    Org {
+        #[command(subcommand)]
+        command: OrgCommands,
+    },
+
+    /// Grant another GitHub user permission to publish this package (owner only)
+    Grant {
+        /// GitHub username to grant publish access
+        github_login: String,
     },
 
     /// List installed packages
+    List,
+}
+
+#[derive(Subcommand)]
+pub enum OrgCommands {
+    /// Create an org you own (`@org` scope for packages)
+    Create {
+        /// Org slug (letters, numbers, hyphens; used as `@org`)
+        name: String,
+    },
+    /// List orgs you own
     List,
 }

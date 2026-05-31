@@ -1,6 +1,6 @@
 /// Summary: LangChain-style AI operations in pure Elysium.
 /// Imports the langchain package from the EPM registry.
-import "#/langchain" as langchain
+import "#/@elysium/langchain" as langchain
 
 func main() {
     // Simple LLM completion

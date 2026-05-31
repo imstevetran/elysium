@@ -218,7 +218,7 @@ Every public function, class, enum, component, and typealias **must** have `/// 
 ```elysium
 import "./math.ely"                  // relative import
 import "./math.ely" as math          // aliased import for namespacing
-import "#/langchain" as langchain    // EPM package import
+import "#/@elysium/langchain" as langchain    // EPM package import
 ```
 
 ## 11. UI Components

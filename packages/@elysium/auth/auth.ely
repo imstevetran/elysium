@@ -3,7 +3,7 @@
 /// No C code, no register statement.
 ///
 /// Usage:
-///   import "#/auth" as auth
+///   import "#/@elysium/auth" as auth
 ///   let token = auth.jwtSign("my-secret", `{"sub":"user123","role":"admin"}`)
 ///   let decoded = auth.jwtVerify("my-secret", token)
 ///   let payload = auth.jwtDecode(token)

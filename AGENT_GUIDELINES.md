@@ -11,6 +11,7 @@
   - `docs/tooling/index.html` — CLI compiler, npm package `elysium-lang`, EPM package manager, linter, syntax highlighter, doc generator, environment filtering
   - `docs/recipes/index.html` — Recipe hub with 16 cards linking to individual recipe pages
   - 16 individual recipe pages covering: hello-world, functions-imports, console-logging, switch-case, filesystem, http-requests, string-crypto, datetime, regex, async-parallel, spec-testing, benchmarking, classes, stub-env, ui-counter, discount
+- **Branding**: Official gold logo at `docs/assets/brand/elysium-logo.png` (navbar + home hero); `favicon.png` / `logo-icon.png` derived for tab icon
 - **Styling**: Dark theme inspired by Vercel/modern docs, responsive, with syntax highlighting classes, copy-to-clipboard on code blocks, mobile navigation, intersection-observer animations
 - **Site location**: `core/docs/` (source of truth in this monorepo)
 - **Public URL**: `https://elysiumlang.github.io/` via docs-only mirror repo `elysiumlang/elysiumlang.github.io`
@@ -18,6 +19,9 @@
 - **Manual mirror**: `./scripts/mirror-docs.sh` (set `DOCS_REPO` if using SSH)
 - **Pages repo setup**: (1) Create org/user `elysiumlang` + empty public repo `elysiumlang.github.io`, (2) Settings → Pages → Deploy from branch `main` / `/ (root)`, (3) Add `DOCS_DEPLOY_TOKEN` to `imstevetran/elysium` secrets, (4) push doc changes to `main` or run workflow manually
 - **This repo does not host Pages** — only mirrors docs outward; language repo stays `imstevetran/elysium`
+- **Package registry page** (`docs/packages/index.html`): loads live from `https://raw.githubusercontent.com/imstevetran/epm-registry/main/registry.json`; `docs/data/packages-meta.json` only supplies icons/categories/tags for known packages (presentation layer, not the source of truth)
+- **EPM registry packages** (May 2026): official packages under `@elysium/*` (`auth`, `ble`, `zigbee`, `langchain`, `langgraph` @ 0.1.0); sources in `packages/@elysium/`; imports `#/@elysium/<name>`; compiler aliases legacy `#/langchain` → `@elysium/langchain`
+- **EPM auth model** (May 2026): `epm login` → `gh` browser/device flow; `epm publish`/`org create`/`grant` require GitHub user; package `owner` is only account that can `epm grant`; org `owner` is only account that can create packages under `@org/*`
 - **README updated**: Now points to documentation site, includes full project structure tree
 
 ### VS Code Extension (added May 2026)
@@ -95,16 +99,16 @@
 
 ### LangChain Package (LLM, Chat, RAG, Agents, AI) — Elysium Source Package (Reworked May 2026)
 - Spec-driven tests at `tests/test_langchain.ely` — uses `spec "LangChain" { feat "..." { expect <expr> } }` to verify all 14 langchain functions type-check correctly
-- LangChain-style AI operations implemented as a pure Elysium source file at `packages/langchain.ely`
-- Uses Elysium's `import "#/langchain" as langchain` syntax — no compiler-level builtin registration needed
-- **Published to EPM registry** as `langchain@0.1.0` — installable via `epm install langchain`
+- LangChain-style AI operations implemented as a pure Elysium source file at `packages/@elysium/langchain/langchain.ely`
+- Uses Elysium's `import "#/@elysium/langchain" as langchain` syntax — no compiler-level builtin registration needed
+- **Published to EPM registry** as `langchain@0.1.0` — installable via `epm install @elysium/langchain`
 - Uses Elysium builtins (dict, json, math, http, env) instead of transport.post() URL hacks
 - **Ollama/local model support**: No API key required. Set `OPENAI_BASE_URL` to your Ollama endpoint (default: `http://localhost:11434/v1`). Set `LLM_MODEL` for the default model (default: `qwen3.5:2b`).
 - Environment variables: `OPENAI_BASE_URL`, `OPENAI_API_KEY` (optional for local), `LLM_MODEL`
 - The `http.request()` response wrapper is parsed via `json.parse → json.get("body") → json.parse → json.get("choices.0.message.content")`
 - API surface: `llm`, `chat`, `embed`, `similarity`, `template`, `rag`, `summarize`, `analyze`, `classify`, `translate`, `agent`, `agentStream`, `chain`, `extract`
 - Example: `examples/langchain.ely` imports the package and exercises all operations
-- Verified via `cargo run -- check examples/langchain.ely`, `cargo run -- check packages/langchain.ely`
+- Verified via `cargo run -- check examples/langchain.ely`, `cargo run -- check packages/@elysium/langchain/langchain.ely`
 
 ### Zigbee (Home Automation) Package (added May 2026)
 - Zigbee home automation operations via `zigbee.` method-call syntax: network management, device control, attribute read/write, group management, binding
@@ -128,9 +132,9 @@
 
 ### LangGraph Package (Stateful Graph-Based Agent Orchestration) — Elysium Source Package (Reworked May 2026)
 - Spec-driven tests at `tests/test_langgraph.ely` — uses `spec "LangGraph" { feat "..." { expect <expr> } }` to verify all 12 langgraph functions type-check correctly
-- LangGraph-style stateful agent orchestration implemented as a pure Elysium source file at `packages/langgraph.ely`
-- Uses Elysium's `import "#/langgraph" as langgraph` syntax — no compiler-level builtin registration needed
-- **Published to EPM registry** as `langgraph@0.1.0` — installable via `epm install langgraph`
+- LangGraph-style stateful agent orchestration implemented as a pure Elysium source file at `packages/@elysium/langgraph/langgraph.ely`
+- Uses Elysium's `import "#/@elysium/langgraph" as langgraph` syntax — no compiler-level builtin registration needed
+- **Published to EPM registry** as `langgraph@0.1.0` — installable via `epm install @elysium/langgraph`
 - All functions delegate to the JS runtime via `transport.post("__langgraph__/<method>", body)`:
   - The `__langgraph__/` URL prefix is intercepted by `npm-package/runtime/transport.js` and routed to `npm-package/runtime/langgraph.js`
   - Multi-argument functions encode parameters with `|||` delimiter
@@ -324,10 +328,10 @@
 
 ### BLE and Zigbee Pure Elysium Packages (added May 2026)
 - BLE and Zigbee operations now available as importable Elysium source packages
-- **`packages/ble.ely`**: Wraps `__ble_*` builtins with clean API — `scan()`, `stopScan()`, `connect(address)`, `disconnect(deviceId)`, `readCharacteristic(devId, serviceUuid, charUuid)`, `writeCharacteristic(devId, serviceUuid, charUuid, value)`, `readRssi(deviceId)`, `deviceName(deviceId)`, `isConnected(deviceId)`, `isScanning()`
-- **`packages/zigbee.ely`**: Wraps `__zigbee_*` builtins — `start()`, `shutdown()`, `permitJoin(seconds)`, `scan()`, `on(devId, ep, cluster)`, `off(devId, ep, cluster)`, `toggle(devId, ep, cluster)`, `readAttribute(devId, ep, cluster, attr)`, `writeAttribute(devId, ep, cluster, attr, value)`, `addToGroup(devId, groupId)`, `removeFromGroup(devId, groupId)`, `bind(srcDev, srcEp, dstDev, dstEp)`, `getDeviceName(devId)`, `getManufacturer(devId)`, `getDeviceCount()`, `getPanId()`, `getChannel()`, `isJoined()`, `isOnline(devId)`, `isPermittingJoin()`
-- Import via: `import "#/ble" as ble` or `import "#/zigbee" as zigbee`
-- Type-checking verified via `cargo run -- check packages/ble.ely` and `cargo run -- check packages/zigbee.ely`
+- **`packages/@elysium/ble/ble.ely`**: Wraps `__ble_*` builtins with clean API — `scan()`, `stopScan()`, `connect(address)`, `disconnect(deviceId)`, `readCharacteristic(devId, serviceUuid, charUuid)`, `writeCharacteristic(devId, serviceUuid, charUuid, value)`, `readRssi(deviceId)`, `deviceName(deviceId)`, `isConnected(deviceId)`, `isScanning()`
+- **`packages/@elysium/zigbee/zigbee.ely`**: Wraps `__zigbee_*` builtins — `start()`, `shutdown()`, `permitJoin(seconds)`, `scan()`, `on(devId, ep, cluster)`, `off(devId, ep, cluster)`, `toggle(devId, ep, cluster)`, `readAttribute(devId, ep, cluster, attr)`, `writeAttribute(devId, ep, cluster, attr, value)`, `addToGroup(devId, groupId)`, `removeFromGroup(devId, groupId)`, `bind(srcDev, srcEp, dstDev, dstEp)`, `getDeviceName(devId)`, `getManufacturer(devId)`, `getDeviceCount()`, `getPanId()`, `getChannel()`, `isJoined()`, `isOnline(devId)`, `isPermittingJoin()`
+- Import via: `import "#/@elysium/ble" as ble` or `import "#/@elysium/zigbee" as zigbee`
+- Type-checking verified via `cargo run -- check packages/@elysium/ble/ble.ely` and `cargo run -- check packages/@elysium/zigbee/zigbee.ely`
 - Examples: `examples/ble.ely`, `examples/zigbee.ely`
 
 ### `is` Operator — Runtime Type Checking (added May 30, 2026)
@@ -347,7 +351,7 @@
 - Verified: `cargo run -- check examples/is_operator.ely` passes; all 116 unit tests pass
 
 ## BLE & Zigbee: full Elysium packages (not compiler builtins)
-- `ble.ely` and `zigbee.ely` are pure Elysium packages in `packages/`, imported via `import "#/ble" as ble`
+- `ble.ely` and `zigbee.ely` are pure Elysium packages in `packages/`, imported via `import "#/@elysium/ble" as ble`
 - They use `transport.post("__ble__/<method>", encodedArgs)` to delegate to JS runtime
 - Compiler-level: no `__ble_*` / `__zigbee_*` prefixes; no special `MirStmt::BleCall`/`MirStmt::ZigbeeCall`; no codegen for these
 - `transport.js` routes `__ble__/*` and `__zigbee__/*` URLs to `ble.js` and `zigbee.js` runtime modules (lazy-loaded)
@@ -357,10 +361,10 @@
 
 ## Test embedding pattern
 - Tests for packages live **inside the package file itself** using `spec { ... }` blocks, not in `tests/`
-- This keeps the package self-contained: `ely test packages/langchain.ely` runs the specs
+- This keeps the package self-contained: `ely test packages/@elysium/langchain/langchain.ely` runs the specs
 - Functions inside the package are called directly (no import alias needed): `llm(...)` not `langchain.llm(...)`
 - Separate `tests/test_*.ely` files are for project-level integration tests (importing packages via `#/`)
-- Verified: `ely test packages/langchain.ely` passes 14 tests, `ely test packages/langgraph.ely` passes 12 tests
+- Verified: `ely test packages/@elysium/langchain/langchain.ely` passes 14 tests, `ely test packages/@elysium/langgraph/langgraph.ely` passes 12 tests
 
 ## WASM is a compilation target, not a runtime API
 - WASM (`__wasm_*` builtins, `wasm.js`, `wasm.ely`) has been **removed entirely** from compiler and runtime

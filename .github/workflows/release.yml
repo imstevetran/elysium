@@ -38,7 +38,7 @@ jobs:
       - name: Add cross-compilation target
         run: rustup target add ${{ matrix.target }}
 
-      - name: Build binary
+      - name: Build binaries
         continue-on-error: true
         working-directory: npm-package
         run: node scripts/build-binaries.js

@@ -9,13 +9,12 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="../assets/css/style.css" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>⚡</text></svg>" />
+  <link rel="icon" href="../assets/brand/favicon.png" type="image/png" />
 </head>
 <body>
   <header class="navbar">
     <a href="../" class="logo">
-      <svg viewBox="0 0 28 28" fill="none"><rect x="2" y="2" width="24" height="24" rx="6" stroke="%236c63ff" stroke-width="2" /><text x="14" y="20" text-anchor="middle" font-size="16" font-weight="bold" fill="%236c63ff">E</text></svg>
-      <span>Elysium</span>
+      <img src="../assets/brand/elysium-logo.png" alt="Elysium" class="elysium-logo" width="120" height="40" />
     </a>
     <button class="menu-toggle" aria-label="Toggle menu">
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
@@ -174,15 +173,27 @@ elysium.datetime.now()</code></pre>
         <tr><td><code>epm install --shake</code></td><td>Install and tree-shake in one step</td></tr>
         <tr><td><code>epm install --legacy</code></td><td>Allow multiple versions of the same dependency</td></tr>
         <tr><td><code>epm lock</code></td><td>Generate <code>elysium.lock</code> from current resolution</td></tr>
-        <tr><td><code>epm publish</code></td><td>Tarball the package and push to registry</td></tr>
+        <tr><td><code>epm publish</code></td><td>Publish <code>@org/package</code> to the registry (GitHub sign-in required)</td></tr>
+        <tr><td><code>epm login</code></td><td>Sign in with GitHub via <code>gh</code> (EPM stores no secrets)</td></tr>
+        <tr><td><code>epm whoami</code></td><td>Show your GitHub username</td></tr>
+        <tr><td><code>epm org create &lt;org&gt;</code></td><td>Create an org scope you own</td></tr>
+        <tr><td><code>epm org list</code></td><td>List orgs you own</td></tr>
+        <tr><td><code>epm grant &lt;user&gt;</code></td><td>Grant publish access (package owner only)</td></tr>
         <tr><td><code>epm search &lt;query&gt;</code></td><td>Search registry by name or description</td></tr>
         <tr><td><code>epm info &lt;package&gt;</code></td><td>Show package details and versions</td></tr>
         <tr><td><code>epm tree</code></td><td>Show the flat dependency tree</td></tr>
         <tr><td><code>epm why &lt;package&gt;</code></td><td>Trace how a package is pulled in</td></tr>
         <tr><td><code>epm shake [--dry-run]</code></td><td>Tree-shake installed packages</td></tr>
         <tr><td><code>epm list</code></td><td>List installed packages in <code>elysium_modules/</code></td></tr>
-        <tr><td><code>epm login &lt;token&gt;</code></td><td>Store GitHub PAT for publish auth</td></tr>
       </table>
+
+      <h3>Publishing packages</h3>
+      <p>EPM is separate from the compiler. Publishing uses your <strong>GitHub account</strong> (no EPM signup, no PAT file in <code>~/.epm</code>). Install the <a href="https://cli.github.com/" target="_blank" rel="noopener">GitHub CLI</a>, then:</p>
+<pre><code>epm login
+epm org create myteam
+epm init --org myteam my-lib
+epm publish</code></pre>
+      <p>Package names must be scoped: <code>@org/name</code>. Only the org owner can publish <em>new</em> packages under that org. The publisher becomes the package owner. Only the owner can run <code>epm grant &lt;github-user&gt;</code> to let someone else publish updates.</p>
 
       <h3>Flat Dependency Resolution</h3>
       <p>By default, EPM uses <strong>flat resolution</strong> — one version per package name. The algorithm walks all transitive dependencies, finds the highest semver version satisfying all constraints, and pins it in <code>elysium.lock</code>.</p>

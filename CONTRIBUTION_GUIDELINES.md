@@ -102,18 +102,17 @@ node -e "const e = require('./npm-package/runtime/index'); console.log(typeof e.
 
 ## Adding a Package to EPM
 
-1. Create an `elysium.json` manifest:
-   ```json
-   {
-     "name": "my-package",
-     "version": "0.1.0",
-     "entry": "main.ely",
-     "dependencies": {}
-   }
-   ```
-2. Write library code in `.ely` files
-3. Publish: `epm publish`
-4. Consume: `epm install my-package`
+EPM is a **separate binary** (`core/epm`). Publishing uses **GitHub sign-in** via the GitHub CLI (`gh`); EPM does not store tokens.
+
+1. Sign in: `epm login` (runs `gh auth login` if needed)
+2. Create an org scope you own: `epm org create myorg`
+3. Scaffold a scoped package: `epm init --org myorg my-lib` → name `@myorg/my-lib`
+4. Write library code in `.ely` files
+5. Publish: `epm publish` (only `@org/name` packages; ACL enforced in registry metadata)
+6. Grant a collaborator (owner only): `epm grant other-github-user`
+7. Consume: `epm install @myorg/my-lib`
+
+Registry index (`registry.json`) includes `orgs` (owner GitHub login) and per-package `owner` + `collaborators`.
 
 ## Release Process
 

@@ -55,8 +55,29 @@ body {
   color: var(--text); text-decoration: none;
   font-weight: 700; font-size: 1.2rem;
 }
+.navbar .logo img.elysium-logo {
+  height: 40px;
+  width: auto;
+  display: block;
+  object-fit: contain;
+}
 .navbar .logo svg { width: 28px; height: 28px; }
-.navbar .logo span { background: linear-gradient(135deg, var(--accent), var(--pink)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+.navbar .logo span {
+  background: linear-gradient(135deg, var(--accent), var(--pink));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.hero-brand {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 24px;
+}
+.hero-brand img {
+  max-width: min(280px, 85vw);
+  height: auto;
+  object-fit: contain;
+}
 .navbar nav { display: flex; gap: 4px; }
 .navbar nav a {
   color: var(--text-dim); text-decoration: none;
@@ -108,6 +129,8 @@ body {
   transition: all 0.2s; text-decoration: none; color: inherit;
 }
 .feature-card:hover { background: var(--bg-card-hover); border-color: var(--border-focus); transform: translateY(-2px); }
+.feature-card-static { cursor: default; }
+.feature-card-static:hover { transform: none; }
 .feature-card .icon { font-size: 1.5rem; margin-bottom: 12px; display: block; }
 .feature-card h3 { font-size: 1.1rem; font-weight: 600; margin-bottom: 8px; }
 .feature-card p { font-size: 0.9rem; color: var(--text-dim); line-height: 1.6; }

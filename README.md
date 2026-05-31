@@ -149,13 +149,13 @@ ely run hello.ely
 │       ├── ui/                    # UI framework guide
 │       ├── std/                   # Standard library reference
 │       ├── spec/                  # Spec-driven development
-│       ├── packages/              # Package registry (auth, ble, zigbee, langchain, langgraph)
+│       ├── packages/              # Package registry docs (@elysium/*)
 │       ├── tooling/               # CLI, EPM, npm, linter
 │       ├── SYNTAX.md              # Complete syntax reference
 │       ├── UI.md                  # Declarative UI layer docs
 │       └── recipes/               # 16 practical code recipes
 ├── extensions/                    # Extensions (JSON with C runtime)
-├── packages/                      # Pure Elysium packages (auth, ble, zigbee, langchain, langgraph)
+├── packages/@elysium/             # Official Elysium packages (@elysium/auth, ble, zigbee, langchain, langgraph)
 ├── npm-package/                   # npm distribution (elysium-lang)
 ├── Cargo.toml                     # Rust workspace definition
 ├── AGENT_GUIDELINES.md            # Development log

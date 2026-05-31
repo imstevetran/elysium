@@ -1,6 +1,6 @@
 [package]
 name = "epm"
-version = "0.1.0"
+version = "0.3.0"
 edition = "2021"
 description = "Elysium Package Manager - npm-like package management for Elysium"
 
@@ -16,3 +16,4 @@ flate2 = "1"
 tar = "0.4"
 tempfile = "3"
 semver = "1"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }

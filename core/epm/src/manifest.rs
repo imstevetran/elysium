@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 /// The elysium.json manifest for an Elysium project.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -62,10 +62,26 @@ impl Manifest {
     }
 }
 
+/// GitHub org scope in the registry (maps to `@org` in package names).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OrgEntry {
+    /// GitHub login of the org owner (only this user can create orgs / grant at org level).
+    pub owner: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<String>,
+}
+
 /// Registry index entry for a published package.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RegistryEntry {
     pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub org: Option<String>,
+    /// GitHub login of the package owner (only owner can `epm grant`).
+    #[serde(default)]
+    pub owner: String,
+    #[serde(default)]
+    pub collaborators: HashMap<String, String>,
     pub description: Option<String>,
     pub author: Option<String>,
     pub license: Option<String>,
@@ -74,25 +90,19 @@ pub struct RegistryEntry {
 }
 
 /// Top-level registry index.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct RegistryIndex {
+    #[serde(default)]
+    pub orgs: HashMap<String, OrgEntry>,
+    #[serde(default)]
     pub packages: HashMap<String, RegistryEntry>,
 }
 
 impl RegistryIndex {
-    #[allow(dead_code)]
-    pub fn new() -> Self {
-        Self {
-            packages: HashMap::new(),
-        }
-    }
-
-    #[allow(dead_code)]
     pub fn from_json(json: &str) -> Result<Self, String> {
         serde_json::from_str(json).map_err(|e| format!("Failed to parse registry index: {}", e))
     }
 
-    #[allow(dead_code)]
     pub fn to_json(&self) -> Result<String, String> {
         serde_json::to_string_pretty(self).map_err(|e| format!("Failed to serialize registry: {}", e))
     }
