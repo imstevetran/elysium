@@ -60,7 +60,7 @@ Use environment variables for configuration (e.g. `OPENAI_API_KEY`, `OPENAI_BASE
 ### Layer 2: Export (`npm-package/runtime/index.js`)
 Add `const <name>Mod = require('./<name>');` and include `<name>: <name>Mod` in `module.exports`.
 
-### Layer 3: Desugaring (`src/main.rs`)
+### Layer 3: Desugaring (`core/src/driver/desugar.rs`)
 In `desugar_builtin_in_expr`, add the package name to the match block:
 ```rust
 "<name>" => "__<name>_",
@@ -68,10 +68,10 @@ In `desugar_builtin_in_expr`, add the package name to the match block:
 
 This converts `<name>.method(args)` to `__<name>_method(args)`.
 
-### Layer 4: Type Checker (`src/type_checker.rs`)
+### Layer 4: Type Checker (`core/src/middle/type_checker.rs`)
 In `register_builtins()`, register all `__<name>_*` builtins with their parameter types and return types. Follow the existing pattern of grouping by return type (String, Bool, Int, Nil).
 
-### Layer 5: MIR Enum (`src/mir.rs`)
+### Layer 5: MIR Enum (`core/src/backend/mir.rs`)
 Add a new variant to `MirStmt`:
 ```rust
 <Name>Call {
@@ -82,12 +82,12 @@ Add a new variant to `MirStmt`:
 },
 ```
 
-### Layer 6: MIR Lowering (`src/mir.rs`)
+### Layer 6: MIR Lowering (`core/src/backend/mir.rs`)
 In the `MirLowerer::lower_stmt`, add handling for `__<name>_` prefixed calls in both:
 - `HirStmt::Let` — when the result is assigned to a variable (use `result: Some(name)`)
 - `HirStmt::Expr` — when called as a standalone expression (use `result: None`)
 
-### Layer 7: Codegen (`src/codegen.rs`)
+### Layer 7: Codegen (`core/src/backend/codegen.rs`)
 - Add dispatch in `emit_stmt` for the new `MirStmt::<Name>Call` variant
 - Add dispatch in `emit_stmt_in_wrapper` for parallel block support
 - Implement `emit_<name>_call()` that emits `printf` stubs (C backend) — real implementation lives in the JS runtime

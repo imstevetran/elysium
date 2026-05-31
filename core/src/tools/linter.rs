@@ -102,15 +102,6 @@ impl<'a> Linter<'a> {
         });
     }
 
-    fn diag_item(&mut self, severity: Severity, rule_id: &str, msg: String, item: &Node<Item>) {
-        self.add_diag(severity, rule_id, msg, item.span.offset, item.span.length, None);
-    }
-
-    fn text_at(&self, offset: usize, length: usize) -> &str {
-        let end = (offset + length).min(self.source.len());
-        &self.source[offset..end]
-    }
-
     /// Rule: No tab indentation.
     fn check_no_tab_indentation(&mut self) {
         for (i, ch) in self.source.char_indices() {

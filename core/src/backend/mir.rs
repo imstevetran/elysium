@@ -215,12 +215,12 @@ pub enum MirValue {
     Nil,
     Local(String),
     BinaryOp {
-        op: super::ast::BinaryOpKind,
+        op: crate::ast::BinaryOpKind,
         left: Box<MirValue>,
         right: Box<MirValue>,
     },
     UnaryOp {
-        op: super::ast::UnaryOpKind,
+        op: crate::ast::UnaryOpKind,
         operand: Box<MirValue>,
     },
     /// Runtime type check: `value is TypeName`.

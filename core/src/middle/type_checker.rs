@@ -1041,7 +1041,6 @@ impl TypeChecker {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast;
 
     fn check_src(src: &str) -> std::result::Result<(), CompileError> {
         let mut p = crate::parser::Parser::new(src);

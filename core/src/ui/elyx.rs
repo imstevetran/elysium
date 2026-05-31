@@ -83,7 +83,7 @@ pub fn parse_elyx(source: &str) -> Result<ElyxFile> {
     // Parse the render block XML if present
     let render_block = if let Some((start, end)) = xml_part_start.zip(xml_part_end) {
         let xml_source = &source[start..end];
-        let root = parse_xml(xml_source, source, start)?;
+        let root = parse_xml(xml_source, start)?;
         Some(ElyxRenderBlock {
             root,
             span: SourceSpan::new(start, end - start),
@@ -143,30 +143,24 @@ fn split_render_block(source: &str) -> Result<(String, Option<usize>, Option<usi
 }
 
 /// Parse XML-like content into an ElyxNode tree.
-fn parse_xml(xml_source: &str, full_source: &str, offset: usize) -> Result<ElyxNode> {
-    let mut parser = XmlParser::new(xml_source, full_source, offset);
+fn parse_xml(xml_source: &str, offset: usize) -> Result<ElyxNode> {
+    let mut parser = XmlParser::new(xml_source, offset);
     parser.parse_fragment()
 }
 
 struct XmlParser<'a> {
     source: &'a str,
-    full_source: &'a str,
     offset: usize,
     pos: usize,
 }
 
 impl<'a> XmlParser<'a> {
-    fn new(source: &'a str, full_source: &'a str, offset: usize) -> Self {
+    fn new(source: &'a str, offset: usize) -> Self {
         XmlParser {
             source,
-            full_source,
             offset,
             pos: 0,
         }
-    }
-
-    fn remaining(&self) -> &str {
-        &self.source[self.pos..]
     }
 
     fn skip_whitespace(&mut self) {
@@ -551,11 +545,10 @@ mod tests {
     #[test]
     fn test_basic_element() {
         let source = "<Text>Hello</Text>";
-        let (_, xml_start, xml_end) = split_render_block(&format!("render {{{}}}", source))
+        let (_, xml_start, _xml_end) = split_render_block(&format!("render {{{}}}", source))
             .unwrap();
-        let (start, end) = (xml_start.unwrap(), xml_end.unwrap());
-        let xml = &source[..];
-        let node = parse_xml(xml, source, 0).unwrap();
+        assert!(xml_start.is_some());
+        let node = parse_xml(source, 0).unwrap();
         match node {
             ElyxNode::Element { tag, children, .. } => {
                 assert_eq!(tag, "Text");
@@ -572,7 +565,7 @@ mod tests {
     #[test]
     fn test_nested_elements() {
         let source = "<Column><Text>Hi</Text><Text>There</Text></Column>";
-        let node = parse_xml(source, source, 0).unwrap();
+        let node = parse_xml(source, 0).unwrap();
         match node {
             ElyxNode::Element { tag, children, .. } => {
                 assert_eq!(tag, "Column");
@@ -585,7 +578,7 @@ mod tests {
     #[test]
     fn test_self_closing() {
         let source = "<Button label=\"Click\" onClick={count + 1} />";
-        let node = parse_xml(source, source, 0).unwrap();
+        let node = parse_xml(source, 0).unwrap();
         match node {
             ElyxNode::Element { tag, attrs, children } => {
                 assert_eq!(tag, "Button");
@@ -599,7 +592,7 @@ mod tests {
     #[test]
     fn test_name_parsing() {
         let source = "my-element";
-        let mut parser = XmlParser::new(source, source, 0);
+        let mut parser = XmlParser::new(source, 0);
         let name = parser.parse_name().unwrap();
         assert_eq!(name, "my-element");
     }
@@ -607,7 +600,7 @@ mod tests {
     #[test]
     fn test_text_content() {
         let source = "  Hello World  ";
-        let mut parser = XmlParser::new(source, source, 0);
+        let mut parser = XmlParser::new(source, 0);
         let text = parser.parse_text();
         assert_eq!(text.unwrap(), "Hello World");
     }
@@ -615,7 +608,7 @@ mod tests {
     #[test]
     fn test_split_render_block_present() {
         let source = "component Foo {\n    state x = 1\n    render {\n        <Text>Hello</Text>\n    }\n}";
-        let (ely_part, xml_start, xml_end) = split_render_block(source).unwrap();
+        let (ely_part, xml_start, _xml_end) = split_render_block(source).unwrap();
         assert!(xml_start.is_some());
         assert!(!ely_part.contains("render"));
     }

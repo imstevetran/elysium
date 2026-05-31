@@ -10,7 +10,7 @@ use std::time::Duration;
 /// A task represents an async computation.
 pub struct Task {
     // In a real implementation this would store a state machine.
-    id: u64,
+    _id: u64,
 }
 
 /// Task scheduler using a work-stealing thread pool.
@@ -59,8 +59,8 @@ impl Scheduler {
     where
         F: FnOnce() + Send + 'static,
     {
-        // In a real implementation, this would create a coroutine/state machine
-        // For now, just run on the current thread
+        // In a real implementation, this would enqueue a Task on self.tasks.
+        let _queue_len = self.tasks.lock().unwrap().len();
         f();
     }
 }

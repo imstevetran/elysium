@@ -421,7 +421,7 @@ fn translate_class(rest: &str) -> String {
     if let Some(ext) = input.strip_prefix("extends ") {
         let _base_end = ext.find(|c: char| c == ' ' || c == '{' || c == 'i').unwrap_or(ext.len());
         let _base_name = &ext[.._base_end];
-        input = ext[_base_end..].trim_start();
+        let _ = ext[_base_end..].trim_start();
         // Emit a comment about extends
     }
 
@@ -429,7 +429,7 @@ fn translate_class(rest: &str) -> String {
     if let Some(imp) = input.strip_prefix("implements ") {
         let impl_end = imp.find('{').unwrap_or(imp.len());
         let _ifaces = &imp[..impl_end];
-        input = imp[impl_end..].trim_start();
+        let _ = imp[impl_end..].trim_start();
     }
 
     format!("class {} {{", name)
@@ -456,7 +456,7 @@ fn translate_interface(rest: &str) -> String {
 
     if let Some(ext) = input.strip_prefix("extends ") {
         let _end = ext.find('{').unwrap_or(ext.len());
-        input = ext[_end..].trim_start();
+        let _ = ext[_end..].trim_start();
     }
 
     // Convert to a doc-comment + type stub

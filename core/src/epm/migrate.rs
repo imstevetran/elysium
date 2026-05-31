@@ -8,6 +8,7 @@ use crate::error;
 /// A single migration rule.
 struct MigrationRule {
     id: &'static str,
+    #[allow(dead_code)]
     description: &'static str,
     /// Whether this migration requires manual review (user must verify the result)
     requires_manual_review: bool,

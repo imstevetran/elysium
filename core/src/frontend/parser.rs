@@ -3,19 +3,17 @@ use crate::error::Result;
 use crate::lexer::{Token, TokenStream};
 
 /// Recursive descent parser for Elysium 2.0
-pub struct Parser<'a> {
+pub struct Parser {
     tokens: Vec<(usize, Token, usize)>,
     pos: usize,
-    source: &'a str,
 }
 
-impl<'a> Parser<'a> {
-    pub fn new(input: &'a str) -> Self {
+impl Parser {
+    pub fn new(input: &str) -> Self {
         let tokens: Vec<_> = TokenStream::new(input).collect();
         Self {
             tokens,
             pos: 0,
-            source: input,
         }
     }
 

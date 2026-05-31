@@ -4,6 +4,13 @@ version = "0.2.0"
 edition = "2021"
 description = "Elysium 2.0 compiler - a human-friendly, AI-compatible programming language"
 
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "elysium"
+path = "src/main.rs"
+
 [dependencies]
 logos = "0.15"
 inkwell = { version = "0.9", features = ["llvm18-1"] }

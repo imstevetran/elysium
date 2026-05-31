@@ -64,6 +64,17 @@
 - Version must follow semver (`<major>.<minor>.<patch>`). The script validates this.
 - The script requires a clean working tree (no uncommitted changes).
 
+### `core/src` layout (reorganized May 2026)
+- **`lib.rs` + `main.rs`**: library root and thin CLI entry (`main.rs` ~300 lines)
+- **`frontend/`**: `ast`, `lexer`, `parser`
+- **`middle/`**: `hir`, `ownership`, `type_checker`
+- **`backend/`**: `mir`, `codegen`, `codegen_tools`
+- **`driver/`**: `cli`, `compile`, `imports`, `desugar`, `stubs`, `elyx_cmd`, `commands`, `source`
+- **`epm/`**: package manager (`init`, `install`, `publish`, `update`, `manifest`, `module`, `port`, `migrate`, `extension`)
+- **`ui/`**: `elyx` (.elyx parser)
+- **`tools/`**: `highlighter`, `linter`, `debug`, `test_runner`
+- **`error.rs`**: shared at crate root; `crate::ast` etc. re-exported from `lib.rs` for stable paths
+
 ### BLE (Bluetooth Low Energy) Package (added May 2026)
 - BLE operations via `ble.` method-call syntax: scanning, connect/disconnect, read/write characteristics, RSSI
 - Desugaring in `main.rs` (`desugar_builtin_calls`) converts `ble.method(...)` → `__ble_method(...)` (same pattern as fs/transport/regex/datetime)

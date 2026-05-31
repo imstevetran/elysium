@@ -278,16 +278,6 @@ fn parse_every_unit(unit: &str, hour: Option<u32>, min: Option<u32>) -> Schedule
     }
 }
 
-/// Get the base interval in seconds for a ScheduleKind (used for runtime sleep between iterations).
-fn schedule_base_interval(kind: &ScheduleKind) -> u32 {
-    match kind {
-        ScheduleKind::Interval(s) => *s,
-        ScheduleKind::DailyAt { .. } => 86400,
-        ScheduleKind::WeeklyAt { .. } => 604800,
-        ScheduleKind::MonthlyAt { .. } => 2592000,
-    }
-}
-
 /// LLVM IR code generator for Elysium.
 pub struct Codegen {
     context: &'static Context,
@@ -1288,9 +1278,6 @@ impl Codegen {
         args: &[MirValue],
         builder: &inkwell::builder::Builder<'static>,
     ) -> Result<()> {
-        let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::default());
-        let i32_ty = self.context.i32_type();
-
         // Declare printf once
         let printf_fn = self.get_printf();
 
@@ -2567,8 +2554,6 @@ impl Codegen {
         _args: &[MirValue],
         builder: &inkwell::builder::Builder<'static>,
     ) -> Result<()> {
-        let i32_ty = self.context.i32_type();
-        let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::default());
         let printf_fn = self.get_printf();
 
         match method {
@@ -2764,8 +2749,6 @@ impl Codegen {
         _args: &[MirValue],
         builder: &inkwell::builder::Builder<'static>,
     ) -> Result<()> {
-        let i32_ty = self.context.i32_type();
-        let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::default());
         let printf_fn = self.get_printf();
 
         match method {
@@ -2841,8 +2824,6 @@ impl Codegen {
         _args: &[MirValue],
         builder: &inkwell::builder::Builder<'static>,
     ) -> Result<()> {
-        let i32_ty = self.context.i32_type();
-        let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::default());
         let printf_fn = self.get_printf();
         let fmt = builder.build_global_string_ptr(
             &format!("[dict] {}: use JS runtime\n", method), "__dict_fmt"
@@ -2859,8 +2840,6 @@ impl Codegen {
         _args: &[MirValue],
         builder: &inkwell::builder::Builder<'static>,
     ) -> Result<()> {
-        let i32_ty = self.context.i32_type();
-        let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::default());
         let printf_fn = self.get_printf();
         let fmt = builder.build_global_string_ptr(
             &format!("[json] {}: use JS runtime\n", method), "__json_fmt"
@@ -2877,8 +2856,6 @@ impl Codegen {
         _args: &[MirValue],
         builder: &inkwell::builder::Builder<'static>,
     ) -> Result<()> {
-        let i32_ty = self.context.i32_type();
-        let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::default());
         let printf_fn = self.get_printf();
         let fmt = builder.build_global_string_ptr(
             &format!("[math] {}: use JS runtime\n", method), "__math_fmt"
@@ -2895,8 +2872,6 @@ impl Codegen {
         _args: &[MirValue],
         builder: &inkwell::builder::Builder<'static>,
     ) -> Result<()> {
-        let i32_ty = self.context.i32_type();
-        let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::default());
         let printf_fn = self.get_printf();
         let fmt = builder.build_global_string_ptr(
             &format!("[env] {}: use JS runtime\n", method), "__env_fmt"
@@ -2913,8 +2888,6 @@ impl Codegen {
         _args: &[MirValue],
         builder: &inkwell::builder::Builder<'static>,
     ) -> Result<()> {
-        let i32_ty = self.context.i32_type();
-        let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::default());
         let printf_fn = self.get_printf();
         let fmt = builder.build_global_string_ptr(
             &format!("[http] {}: use JS runtime\n", method), "__http_fmt"
@@ -2931,8 +2904,6 @@ impl Codegen {
         _type_name: &MirValue,
         builder: &inkwell::builder::Builder<'static>,
     ) -> Result<()> {
-        let i32_ty = self.context.i32_type();
-        let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::default());
         let printf_fn = self.get_printf();
         let fmt = builder.build_global_string_ptr(
             "[is] instanceof: use JS runtime\n", "__is_fmt"

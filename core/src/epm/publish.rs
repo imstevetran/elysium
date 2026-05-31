@@ -2,7 +2,6 @@ use std::fs;
 use std::path::Path;
 
 use crate::error;
-use crate::manifest;
 
 /// Run `elysium publish`.
 /// Reads the package's elysium.json, validates it, and pushes it to the EPM registry.
@@ -77,8 +76,6 @@ pub fn cmd_publish(path_opt: Option<&Path>) -> error::Result<()> {
     //
     // We print instructions for now until the full automation is built.
     let description = manifest.get("description").and_then(|v| v.as_str()).unwrap_or("");
-    let author = manifest.get("author").and_then(|v| v.as_str()).unwrap_or("");
-
     eprintln!("  Note: automated publishing is not yet implemented.");
     eprintln!("  To publish manually:");
     eprintln!("    1. Fork or clone the EPM registry repository:");
